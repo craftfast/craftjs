@@ -3,7 +3,7 @@ import { Banner, Head } from "nextra/components";
 import { getPageMap } from "nextra/page-map";
 import "nextra-theme-docs/style.css";
 import "../globals.css";
-import { LogoIcon } from "@/components/logo";
+import { CraftLogo } from "@/components/craft-logo";
 
 export const metadata = {
   title: {
@@ -29,11 +29,7 @@ const navbar = (
   <Navbar
     logo={
       <span className="flex items-center gap-2 text-lg font-semibold">
-        <LogoIcon size={24} />
-        <span>
-          <span className="text-neutral-900 dark:text-white">Craft</span>
-          <span className="text-neutral-400">JS</span>
-        </span>
+        <CraftLogo />
       </span>
     }
     projectLink="https://github.com/craftfast/craftjs"

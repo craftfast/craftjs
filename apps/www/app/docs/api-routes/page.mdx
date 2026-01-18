@@ -1,6 +1,6 @@
 # API Routes
 
-import { Callout } from 'nextra/components'
+import { Callout } from "nextra/components";
 
 This section documents all API endpoints available in CraftJS.
 
@@ -8,16 +8,16 @@ This section documents all API endpoints available in CraftJS.
 
 CraftJS provides RESTful API endpoints for all major features:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/auth/*` | Various | Authentication (Better Auth) |
-| `/api/chat` | POST | AI chat completions |
-| `/api/chats` | GET | List user chats |
-| `/api/chats/[id]` | GET/DELETE | Get or delete a chat |
-| `/api/upload` | POST | Get file upload URL |
-| `/api/checkout` | POST | Create payment checkout |
-| `/api/billing/portal` | POST | Access billing portal |
-| `/api/webhooks/*` | POST | Webhook handlers |
+| Endpoint              | Method     | Description                  |
+| --------------------- | ---------- | ---------------------------- |
+| `/api/auth/*`         | Various    | Authentication (Better Auth) |
+| `/api/chat`           | POST       | AI chat completions          |
+| `/api/chats`          | GET        | List user chats              |
+| `/api/chats/[id]`     | GET/DELETE | Get or delete a chat         |
+| `/api/upload`         | POST       | Get file upload URL          |
+| `/api/checkout`       | POST       | Create payment checkout      |
+| `/api/billing/portal` | POST       | Access billing portal        |
+| `/api/webhooks/*`     | POST       | Webhook handlers             |
 
 ## Authentication
 
@@ -42,10 +42,10 @@ curl -X POST https://yourapp.com/api/chat \
 
 API endpoints are rate limited per user:
 
-| Plan | Limit |
-|------|-------|
-| Free | 10 requests/minute |
-| Pro | 100 requests/minute |
+| Plan       | Limit                |
+| ---------- | -------------------- |
+| Free       | 10 requests/minute   |
+| Pro        | 100 requests/minute  |
 | Enterprise | 1000 requests/minute |
 
 Rate limit headers are included in responses:
@@ -69,18 +69,19 @@ All errors follow a consistent format:
 
 ### Common Error Codes
 
-| Status | Code | Description |
-|--------|------|-------------|
-| 400 | `INVALID_REQUEST` | Invalid request body |
-| 401 | `UNAUTHORIZED` | Not authenticated |
-| 403 | `FORBIDDEN` | Not authorized for this resource |
-| 404 | `NOT_FOUND` | Resource not found |
-| 429 | `RATE_LIMITED` | Rate limit exceeded |
-| 500 | `INTERNAL_ERROR` | Server error |
+| Status | Code              | Description                      |
+| ------ | ----------------- | -------------------------------- |
+| 400    | `INVALID_REQUEST` | Invalid request body             |
+| 401    | `UNAUTHORIZED`    | Not authenticated                |
+| 403    | `FORBIDDEN`       | Not authorized for this resource |
+| 404    | `NOT_FOUND`       | Resource not found               |
+| 429    | `RATE_LIMITED`    | Rate limit exceeded              |
+| 500    | `INTERNAL_ERROR`  | Server error                     |
 
 ## CORS
 
 CORS is configured to allow requests from:
+
 - Your production domain
 - `localhost` in development
 
@@ -103,19 +104,19 @@ async headers() {
 
 ## API Sections
 
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
-  <a href="/api-auth" className="block p-6 border rounded-lg hover:border-blue-500">
-    <h3 className="font-semibold text-lg">Auth API</h3>
-    <p className="text-gray-500">Authentication endpoints</p>
+<div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
+  <a href="/api-auth" className="block rounded-lg border p-6 hover:border-emerald-500">
+    <h3 className="text-lg font-semibold">Auth API</h3>
+    <p className="text-neutral-500 dark:text-neutral-400">Authentication endpoints</p>
   </a>
-  
-  <a href="/api-ai" className="block p-6 border rounded-lg hover:border-blue-500">
-    <h3 className="font-semibold text-lg">AI API</h3>
-    <p className="text-gray-500">Chat and completions</p>
+
+  <a href="/api-ai" className="block rounded-lg border p-6 hover:border-emerald-500">
+    <h3 className="text-lg font-semibold">AI API</h3>
+    <p className="text-neutral-500 dark:text-neutral-400">Chat and completions</p>
   </a>
-  
-  <a href="/api-payments" className="block p-6 border rounded-lg hover:border-blue-500">
-    <h3 className="font-semibold text-lg">Payments API</h3>
-    <p className="text-gray-500">Billing and subscriptions</p>
+
+  <a href="/api-payments" className="block rounded-lg border p-6 hover:border-emerald-500">
+    <h3 className="text-lg font-semibold">Payments API</h3>
+    <p className="text-neutral-500 dark:text-neutral-400">Billing and subscriptions</p>
   </a>
 </div>

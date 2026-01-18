@@ -1,6 +1,6 @@
 # AI Integration
 
-import { Tabs, Callout, Steps } from 'nextra/components'
+import { Tabs, Callout, Steps } from "nextra/components";
 
 CraftJS integrates multiple AI providers through the [Vercel AI SDK 6](https://ai-sdk.dev/), giving you flexibility to use OpenAI, Anthropic, or Google AI models.
 
@@ -34,27 +34,27 @@ GOOGLE_GENERATIVE_AI_API_KEY="..."
 Configure models in `src/lib/ai/models.ts`:
 
 ```typescript
-import { openai } from "@ai-sdk/openai"
-import { anthropic } from "@ai-sdk/anthropic"
-import { google } from "@ai-sdk/google"
+import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
+import { google } from "@ai-sdk/google";
 
 export const models = {
   // OpenAI models
   "gpt-4o": openai("gpt-4o"),
   "gpt-4o-mini": openai("gpt-4o-mini"),
   "gpt-4-turbo": openai("gpt-4-turbo"),
-  
+
   // Anthropic models
   "claude-sonnet-4": anthropic("claude-sonnet-4-20250514"),
   "claude-3-5-haiku": anthropic("claude-3-5-haiku-latest"),
   "claude-3-opus": anthropic("claude-3-opus-latest"),
-  
+
   // Google models
   "gemini-2-flash": google("gemini-2.0-flash"),
   "gemini-1.5-pro": google("gemini-1.5-pro"),
-} as const
+} as const;
 
-export type ModelId = keyof typeof models
+export type ModelId = keyof typeof models;
 ```
 
 ## Basic Usage
@@ -62,30 +62,30 @@ export type ModelId = keyof typeof models
 ### Simple Text Generation
 
 ```typescript
-import { generateText } from "ai"
-import { models } from "@/lib/ai/models"
+import { generateText } from "ai";
+import { models } from "@/lib/ai/models";
 
 const { text } = await generateText({
   model: models["gpt-4o"],
   prompt: "Explain quantum computing in simple terms.",
-})
+});
 
-console.log(text)
+console.log(text);
 ```
 
 ### Streaming Responses
 
 ```typescript
-import { streamText } from "ai"
-import { models } from "@/lib/ai/models"
+import { streamText } from "ai";
+import { models } from "@/lib/ai/models";
 
 const result = await streamText({
   model: models["claude-sonnet-4"],
   prompt: "Write a short story about a robot learning to paint.",
-})
+});
 
 for await (const chunk of result.textStream) {
-  process.stdout.write(chunk)
+  process.stdout.write(chunk);
 }
 ```
 
@@ -96,39 +96,39 @@ for await (const chunk of result.textStream) {
 The main chat endpoint is at `app/api/chat/route.ts`:
 
 ```typescript
-import { streamText } from "ai"
-import { models, type ModelId } from "@/lib/ai/models"
-import { auth } from "@/lib/auth/server"
-import { rateLimit } from "@/lib/cache/rate-limiter"
-import { headers } from "next/headers"
+import { streamText } from "ai";
+import { models, type ModelId } from "@/lib/ai/models";
+import { auth } from "@/lib/auth/server";
+import { rateLimit } from "@/lib/cache/rate-limiter";
+import { headers } from "next/headers";
 
 export async function POST(req: Request) {
   // Authenticate user
   const session = await auth.api.getSession({
     headers: await headers(),
-  })
-  
+  });
+
   if (!session) {
-    return new Response("Unauthorized", { status: 401 })
+    return new Response("Unauthorized", { status: 401 });
   }
-  
+
   // Rate limiting
-  const { success } = await rateLimit(session.user.id)
+  const { success } = await rateLimit(session.user.id);
   if (!success) {
-    return new Response("Rate limit exceeded", { status: 429 })
+    return new Response("Rate limit exceeded", { status: 429 });
   }
-  
+
   // Parse request
-  const { messages, model = "gpt-4o" } = await req.json()
-  
+  const { messages, model = "gpt-4o" } = await req.json();
+
   // Generate response
   const result = await streamText({
     model: models[model as ModelId],
     messages,
     system: "You are a helpful AI assistant.",
-  })
-  
-  return result.toDataStreamResponse()
+  });
+
+  return result.toDataStreamResponse();
 }
 ```
 
@@ -159,8 +159,8 @@ export async function POST(req: Request) {
                 <span
                   className={`inline-block p-3 rounded-lg ${
                     message.role === "user"
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 dark:bg-gray-800"
+                      ? "bg-emerald-500 text-white"
+                      : "bg-neutral-200 dark:bg-neutral-800"
                   }`}
                 >
                   {message.content}
@@ -181,7 +181,7 @@ export async function POST(req: Request) {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="px-4 py-2 bg-blue-500 text-white rounded"
+                className="px-4 py-2 bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50"
               >
                 Send
               </button>
@@ -228,8 +228,8 @@ Extend AI capabilities with custom tools:
 
 ```typescript
 // lib/ai/tools.ts
-import { tool } from "ai"
-import { z } from "zod"
+import { tool } from "ai";
+import { z } from "zod";
 
 export const weatherTool = tool({
   description: "Get the current weather in a location",
@@ -238,14 +238,14 @@ export const weatherTool = tool({
   }),
   execute: async ({ location }) => {
     // Call weather API
-    const weather = await fetchWeather(location)
+    const weather = await fetchWeather(location);
     return {
       location,
       temperature: weather.temp,
       conditions: weather.conditions,
-    }
+    };
   },
-})
+});
 
 export const searchTool = tool({
   description: "Search the web for information",
@@ -254,29 +254,29 @@ export const searchTool = tool({
   }),
   execute: async ({ query }) => {
     // Call search API
-    const results = await search(query)
-    return results
+    const results = await search(query);
+    return results;
   },
-})
+});
 
 export const tools = {
   weather: weatherTool,
   search: searchTool,
-}
+};
 ```
 
 ### Use Tools in Chat
 
 ```typescript
-import { streamText } from "ai"
-import { tools } from "@/lib/ai/tools"
+import { streamText } from "ai";
+import { tools } from "@/lib/ai/tools";
 
 const result = await streamText({
   model: models["gpt-4o"],
   messages,
   tools,
   maxToolRoundtrips: 5, // Allow multiple tool calls
-})
+});
 ```
 
 ## System Prompts
@@ -286,21 +286,21 @@ Define reusable prompts in `src/lib/ai/prompts.ts`:
 ```typescript
 export const prompts = {
   assistant: `You are a helpful AI assistant. Be concise and accurate.`,
-  
+
   codeReviewer: `You are a senior software engineer reviewing code.
 Focus on:
 - Code quality and best practices
 - Potential bugs and security issues
 - Performance optimizations
 - Readability and maintainability`,
-  
+
   writer: `You are a professional content writer.
 Your writing is:
 - Clear and engaging
 - Well-structured
 - SEO-optimized when appropriate
 - Free of grammatical errors`,
-}
+};
 ```
 
 Usage:
@@ -310,7 +310,7 @@ const result = await streamText({
   model: models["claude-sonnet-4"],
   system: prompts.codeReviewer,
   messages,
-})
+});
 ```
 
 ## Rate Limiting
@@ -319,18 +319,18 @@ CraftJS includes built-in rate limiting per user:
 
 ```typescript
 // lib/cache/rate-limiter.ts
-import { Ratelimit } from "@upstash/ratelimit"
-import { redis } from "./redis"
+import { Ratelimit } from "@upstash/ratelimit";
+import { redis } from "./redis";
 
 export const rateLimit = new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(10, "1 m"), // 10 requests per minute
   analytics: true,
   prefix: "ratelimit:ai",
-})
+});
 
 // Usage in API route
-const { success, remaining, reset } = await rateLimit.limit(userId)
+const { success, remaining, reset } = await rateLimit.limit(userId);
 
 if (!success) {
   return new Response("Rate limit exceeded", {
@@ -339,7 +339,7 @@ if (!success) {
       "X-RateLimit-Remaining": remaining.toString(),
       "X-RateLimit-Reset": reset.toString(),
     },
-  })
+  });
 }
 ```
 
@@ -349,19 +349,19 @@ Adjust limits based on user subscription:
 
 ```typescript
 export async function getRateLimit(userId: string) {
-  const user = await getUser(userId)
-  
+  const user = await getUser(userId);
+
   const limits = {
     free: Ratelimit.slidingWindow(10, "1 m"),
     pro: Ratelimit.slidingWindow(100, "1 m"),
     enterprise: Ratelimit.slidingWindow(1000, "1 m"),
-  }
-  
+  };
+
   return new Ratelimit({
     redis,
     limiter: limits[user.plan],
     prefix: `ratelimit:ai:${user.plan}`,
-  })
+  });
 }
 ```
 
@@ -371,8 +371,8 @@ Track AI usage for billing or analytics:
 
 ```typescript
 // lib/ai/usage.ts
-import { db } from "@/lib/db/client"
-import { aiUsage } from "@/lib/db/schema"
+import { db } from "@/lib/db/client";
+import { aiUsage } from "@/lib/db/schema";
 
 export async function trackUsage(
   userId: string,
@@ -387,7 +387,7 @@ export async function trackUsage(
     completionTokens,
     totalTokens: promptTokens + completionTokens,
     timestamp: new Date(),
-  })
+  });
 }
 ```
 
@@ -403,21 +403,21 @@ const result = await streamText({
       modelId,
       result.usage.promptTokens,
       result.usage.completionTokens
-    )
+    );
   },
-})
+});
 ```
 
 ## Error Handling
 
 ```typescript
-import { AISDKError } from "ai"
+import { AISDKError } from "ai";
 
 try {
   const result = await generateText({
     model: models["gpt-4o"],
     prompt: "...",
-  })
+  });
 } catch (error) {
   if (error instanceof AISDKError) {
     if (error.code === "rate_limit_exceeded") {
@@ -426,15 +426,13 @@ try {
       // Handle invalid key
     }
   }
-  throw error
+  throw error;
 }
 ```
 
 ## Best Practices
 
-<Callout type="info">
-  **Tips for production AI applications:**
-</Callout>
+<Callout type="info">**Tips for production AI applications:**</Callout>
 
 1. **Always implement rate limiting** - Protect against abuse
 2. **Stream responses** - Better UX for long responses

@@ -1,12 +1,13 @@
 # Custom AI Tools
 
-import { Steps, Callout, Tabs } from 'nextra/components'
+import { Steps, Callout, Tabs } from "nextra/components";
 
 Learn how to extend AI capabilities with custom tools that allow the AI to perform actions like searching, fetching data, or interacting with external APIs.
 
 ## What are AI Tools?
 
 Tools (also called function calling) allow AI models to:
+
 - Access real-time information
 - Perform calculations
 - Interact with databases
@@ -16,8 +17,8 @@ Tools (also called function calling) allow AI models to:
 ## Basic Tool Structure
 
 ```typescript
-import { tool } from "ai"
-import { z } from "zod"
+import { tool } from "ai";
+import { z } from "zod";
 
 const myTool = tool({
   description: "A description of what this tool does",
@@ -27,9 +28,9 @@ const myTool = tool({
   }),
   execute: async ({ param1, param2 }) => {
     // Tool logic here
-    return { result: "..." }
+    return { result: "..." };
   },
-})
+});
 ```
 
 ## Examples
@@ -38,8 +39,8 @@ const myTool = tool({
 
 ```typescript
 // lib/ai/tools/weather.ts
-import { tool } from "ai"
-import { z } from "zod"
+import { tool } from "ai";
+import { z } from "zod";
 
 export const weatherTool = tool({
   description: "Get current weather for a location",
@@ -51,13 +52,11 @@ export const weatherTool = tool({
     // Call weather API
     const response = await fetch(
       `https://api.weatherapi.com/v1/current.json?key=${process.env.WEATHER_API_KEY}&q=${location}`
-    )
-    const data = await response.json()
-    
-    const temp = units === "celsius" 
-      ? data.current.temp_c 
-      : data.current.temp_f
-    
+    );
+    const data = await response.json();
+
+    const temp = units === "celsius" ? data.current.temp_c : data.current.temp_f;
+
     return {
       location: data.location.name,
       country: data.location.country,
@@ -65,17 +64,17 @@ export const weatherTool = tool({
       units,
       condition: data.current.condition.text,
       humidity: data.current.humidity,
-    }
+    };
   },
-})
+});
 ```
 
 ### Web Search Tool
 
 ```typescript
 // lib/ai/tools/search.ts
-import { tool } from "ai"
-import { z } from "zod"
+import { tool } from "ai";
+import { z } from "zod";
 
 export const searchTool = tool({
   description: "Search the web for information",
@@ -92,30 +91,30 @@ export const searchTool = tool({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ q: query, num: maxResults }),
-    })
-    
-    const data = await response.json()
-    
+    });
+
+    const data = await response.json();
+
     return {
       results: data.organic.map((item: any) => ({
         title: item.title,
         link: item.link,
         snippet: item.snippet,
       })),
-    }
+    };
   },
-})
+});
 ```
 
 ### Database Query Tool
 
 ```typescript
 // lib/ai/tools/database.ts
-import { tool } from "ai"
-import { z } from "zod"
-import { db } from "@/lib/db/client"
-import { users, subscriptions } from "@/lib/db/schema"
-import { eq, sql } from "drizzle-orm"
+import { tool } from "ai";
+import { z } from "zod";
+import { db } from "@/lib/db/client";
+import { users, subscriptions } from "@/lib/db/schema";
+import { eq, sql } from "drizzle-orm";
 
 export const userStatsTool = tool({
   description: "Get statistics about users in the system",
@@ -125,11 +124,9 @@ export const userStatsTool = tool({
   execute: async ({ metric }) => {
     switch (metric) {
       case "total":
-        const [{ count }] = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(users)
-        return { totalUsers: count }
-        
+        const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(users);
+        return { totalUsers: count };
+
       case "by_plan":
         const byPlan = await db
           .select({
@@ -137,27 +134,27 @@ export const userStatsTool = tool({
             count: sql<number>`count(*)`,
           })
           .from(users)
-          .groupBy(users.plan)
-        return { usersByPlan: byPlan }
-        
+          .groupBy(users.plan);
+        return { usersByPlan: byPlan };
+
       case "recent_signups":
         const recentUsers = await db
           .select({ name: users.name, createdAt: users.createdAt })
           .from(users)
           .orderBy(sql`${users.createdAt} DESC`)
-          .limit(5)
-        return { recentSignups: recentUsers }
+          .limit(5);
+        return { recentSignups: recentUsers };
     }
   },
-})
+});
 ```
 
 ### Calculator Tool
 
 ```typescript
 // lib/ai/tools/calculator.ts
-import { tool } from "ai"
-import { z } from "zod"
+import { tool } from "ai";
+import { z } from "zod";
 
 export const calculatorTool = tool({
   description: "Perform mathematical calculations",
@@ -169,23 +166,23 @@ export const calculatorTool = tool({
     // For demo, using Function (not recommended for production)
     try {
       // Sanitize - only allow numbers and operators
-      const sanitized = expression.replace(/[^0-9+\-*/().%\s]/g, "")
-      const result = Function(`return ${sanitized}`)()
-      return { expression, result }
+      const sanitized = expression.replace(/[^0-9+\-*/().%\s]/g, "");
+      const result = Function(`return ${sanitized}`)();
+      return { expression, result };
     } catch (error) {
-      return { expression, error: "Invalid expression" }
+      return { expression, error: "Invalid expression" };
     }
   },
-})
+});
 ```
 
 ### File Reader Tool
 
 ```typescript
 // lib/ai/tools/file-reader.ts
-import { tool } from "ai"
-import { z } from "zod"
-import { getDownloadUrl } from "@/lib/storage/r2"
+import { tool } from "ai";
+import { z } from "zod";
+import { getDownloadUrl } from "@/lib/storage/r2";
 
 export const readFileTool = tool({
   description: "Read content from a file stored in the system",
@@ -193,17 +190,17 @@ export const readFileTool = tool({
     fileKey: z.string().describe("The file key/path in storage"),
   }),
   execute: async ({ fileKey }) => {
-    const url = await getDownloadUrl(fileKey)
-    const response = await fetch(url)
-    const content = await response.text()
-    
+    const url = await getDownloadUrl(fileKey);
+    const response = await fetch(url);
+    const content = await response.text();
+
     return {
       fileKey,
       contentLength: content.length,
       preview: content.slice(0, 1000),
-    }
+    };
   },
-})
+});
 ```
 
 ## Combining Tools
@@ -212,32 +209,32 @@ export const readFileTool = tool({
 
 ```typescript
 // lib/ai/tools/index.ts
-import { weatherTool } from "./weather"
-import { searchTool } from "./search"
-import { calculatorTool } from "./calculator"
-import { userStatsTool } from "./database"
+import { weatherTool } from "./weather";
+import { searchTool } from "./search";
+import { calculatorTool } from "./calculator";
+import { userStatsTool } from "./database";
 
 export const tools = {
   weather: weatherTool,
   search: searchTool,
   calculator: calculatorTool,
   userStats: userStatsTool,
-}
+};
 
-export type ToolName = keyof typeof tools
+export type ToolName = keyof typeof tools;
 ```
 
 ### Using Tools in Chat API
 
 ```typescript
 // app/api/chat/route.ts
-import { streamText } from "ai"
-import { models } from "@/lib/ai/models"
-import { tools } from "@/lib/ai/tools"
+import { streamText } from "ai";
+import { models } from "@/lib/ai/models";
+import { tools } from "@/lib/ai/tools";
 
 export async function POST(req: Request) {
-  const { messages, model = "gpt-4o" } = await req.json()
-  
+  const { messages, model = "gpt-4o" } = await req.json();
+
   const result = await streamText({
     model: models[model],
     messages,
@@ -249,9 +246,9 @@ Use the appropriate tool when the user asks for:
 - Web searches
 - Calculations
 - User statistics`,
-  })
-  
-  return result.toDataStreamResponse()
+  });
+
+  return result.toDataStreamResponse();
 }
 ```
 
@@ -261,11 +258,11 @@ Use the appropriate tool when the user asks for:
 
 ```typescript
 // lib/ai/tools/user-context.ts
-import { tool } from "ai"
-import { z } from "zod"
-import { db } from "@/lib/db/client"
-import { users, subscriptions } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { tool } from "ai";
+import { z } from "zod";
+import { db } from "@/lib/db/client";
+import { users, subscriptions } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export function createUserContextTool(userId: string) {
   return tool({
@@ -276,25 +273,26 @@ export function createUserContextTool(userId: string) {
     execute: async ({ info }) => {
       switch (info) {
         case "profile":
-          const [user] = await db
-            .select()
-            .from(users)
-            .where(eq(users.id, userId))
-          return { profile: user }
-          
+          const [user] = await db.select().from(users).where(eq(users.id, userId));
+          return { profile: user };
+
         case "subscription":
           const [sub] = await db
             .select()
             .from(subscriptions)
-            .where(eq(subscriptions.userId, userId))
-          return { subscription: sub }
-          
+            .where(eq(subscriptions.userId, userId));
+          return { subscription: sub };
+
         case "usage":
           // Get usage stats
-          return { usage: { /* ... */ } }
+          return {
+            usage: {
+              /* ... */
+            },
+          };
       }
     },
-  })
+  });
 }
 
 // Usage in API route
@@ -305,16 +303,16 @@ const result = await streamText({
     ...tools,
     userContext: createUserContextTool(session.user.id),
   },
-})
+});
 ```
 
 ### Async Tool Execution
 
 ```typescript
 // lib/ai/tools/async-task.ts
-import { tool } from "ai"
-import { z } from "zod"
-import { longRunningTask } from "@/trigger/tasks"
+import { tool } from "ai";
+import { z } from "zod";
+import { longRunningTask } from "@/trigger/tasks";
 
 export const asyncTaskTool = tool({
   description: "Start a long-running task",
@@ -324,14 +322,14 @@ export const asyncTaskTool = tool({
   }),
   execute: async ({ taskType, data }) => {
     // Trigger background job
-    const handle = await longRunningTask.trigger({ taskType, data })
-    
+    const handle = await longRunningTask.trigger({ taskType, data });
+
     return {
       taskId: handle.id,
       message: "Task started. Check back later for results.",
-    }
+    };
   },
-})
+});
 ```
 
 ### Tool with Confirmation
@@ -350,13 +348,13 @@ export const deleteDataTool = tool({
         requiresConfirmation: true,
         message: `Are you sure you want to delete your ${dataType}? This cannot be undone.`,
         confirmationPrompt: `To confirm, say "delete my ${dataType}"`,
-      }
+      };
     }
-    
+
     // Perform deletion
-    return { success: true, message: `${dataType} deleted` }
+    return { success: true, message: `${dataType} deleted` };
   },
-})
+});
 ```
 
 ## Displaying Tool Results
@@ -365,12 +363,12 @@ export const deleteDataTool = tool({
 
 ```tsx
 // components/chat/tool-result.tsx
-import { Card } from "@/components/ui/card"
-import { Cloud, Search, Calculator } from "lucide-react"
+import { Card } from "@/components/ui/card";
+import { Cloud, Search, Calculator } from "lucide-react";
 
 interface ToolResultProps {
-  toolName: string
-  result: any
+  toolName: string;
+  result: any;
 }
 
 export function ToolResult({ toolName, result }: ToolResultProps) {
@@ -379,51 +377,49 @@ export function ToolResult({ toolName, result }: ToolResultProps) {
       return (
         <Card className="p-4">
           <div className="flex items-center gap-2">
-            <Cloud className="w-5 h-5" />
+            <Cloud className="h-5 w-5" />
             <span className="font-medium">{result.location}</span>
           </div>
-          <p className="text-2xl mt-2">
+          <p className="mt-2 text-2xl">
             {result.temperature}° {result.units === "celsius" ? "C" : "F"}
           </p>
-          <p className="text-gray-500">{result.condition}</p>
+          <p className="text-neutral-500 dark:text-neutral-400">{result.condition}</p>
         </Card>
-      )
-      
+      );
+
     case "search":
       return (
         <Card className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Search className="w-5 h-5" />
+          <div className="mb-3 flex items-center gap-2">
+            <Search className="h-5 w-5" />
             <span className="font-medium">Search Results</span>
           </div>
           <ul className="space-y-2">
             {result.results.map((r: any, i: number) => (
               <li key={i}>
-                <a href={r.link} className="text-blue-600 hover:underline">
+                <a href={r.link} className="text-emerald-600 hover:underline">
                   {r.title}
                 </a>
-                <p className="text-sm text-gray-500">{r.snippet}</p>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">{r.snippet}</p>
               </li>
             ))}
           </ul>
         </Card>
-      )
-      
+      );
+
     default:
       return (
         <Card className="p-4">
           <pre className="text-sm">{JSON.stringify(result, null, 2)}</pre>
         </Card>
-      )
+      );
   }
 }
 ```
 
 ## Best Practices
 
-<Callout type="info">
-  **Tips for creating effective tools:**
-</Callout>
+<Callout type="info">**Tips for creating effective tools:**</Callout>
 
 1. **Write clear descriptions** - The AI uses these to decide when to use tools
 2. **Validate parameters** - Use Zod schemas thoroughly
@@ -434,9 +430,7 @@ export function ToolResult({ toolName, result }: ToolResultProps) {
 
 ## Security Considerations
 
-<Callout type="warning">
-  **Important security notes:**
-</Callout>
+<Callout type="warning">**Important security notes:**</Callout>
 
 1. **Validate inputs** - Never trust AI-generated parameters
 2. **Limit permissions** - Tools should have minimal access

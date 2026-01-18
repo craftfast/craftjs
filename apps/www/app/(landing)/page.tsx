@@ -12,10 +12,10 @@ import {
   Cloud,
   BarChart3,
 } from "lucide-react";
-import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { CraftLogo } from "@/components/craft-logo";
 
 const features = [
   {
@@ -79,7 +79,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-6">
           <div className="flex h-14 items-center justify-between">
             <Link href="/" className="flex items-center gap-3">
-              <Logo size="sm" />
+              <CraftLogo className="text-lg" />
             </Link>
 
             <div className="hidden items-center gap-8 md:flex">
@@ -175,15 +175,15 @@ export default function LandingPage() {
             <div className="animate-fade-in animation-delay-400">
               <div className="overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950 shadow-2xl">
                 <div className="flex items-center gap-2 border-b border-neutral-800 px-4 py-3">
-                  <div className="h-3 w-3 rounded-full bg-neutral-700" />
-                  <div className="h-3 w-3 rounded-full bg-neutral-700" />
-                  <div className="h-3 w-3 rounded-full bg-neutral-700" />
+                  <div className="h-3 w-3 rounded-full bg-red-500" />
+                  <div className="h-3 w-3 rounded-full bg-yellow-500" />
+                  <div className="h-3 w-3 rounded-full bg-green-500" />
                   <span className="ml-2 text-xs text-neutral-500">terminal</span>
                 </div>
                 <div className="p-4 font-mono text-sm">
                   <div className="flex items-center gap-2">
                     <span className="text-emerald-400">$</span>
-                    <span className="text-neutral-300">npx create-craft-app my-app</span>
+                    <span className="text-neutral-200">npx create-craft-app my-app</span>
                   </div>
                   <div className="mt-2 text-neutral-500">
                     <span className="text-neutral-400">→</span> Creating your CraftJS app...
@@ -369,7 +369,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-6">
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
             <div className="flex items-center gap-4">
-              <Logo size="sm" />
+              <CraftLogo />
               <span className="text-muted-foreground text-sm">Open source under MIT</span>
             </div>
 
