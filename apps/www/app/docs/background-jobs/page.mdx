@@ -1,0 +1,441 @@
+# Background Jobs
+
+import { Tabs, Callout, Steps } from 'nextra/components'
+
+CraftJS uses [Trigger.dev](https://trigger.dev/) for reliable background job processing.
+
+## Features
+
+- ✅ **Serverless Execution** - No infrastructure to manage
+- ✅ **Retries** - Automatic retry with backoff
+- ✅ **Scheduling** - Cron and delayed jobs
+- ✅ **Type Safety** - Full TypeScript support
+- ✅ **Observability** - Built-in monitoring dashboard
+
+## Configuration
+
+### Environment Variables
+
+```env
+TRIGGER_SECRET_KEY="tr_..."
+```
+
+Get your secret key from the [Trigger.dev Dashboard](https://cloud.trigger.dev/).
+
+### Setup
+
+<Steps>
+### Install Trigger.dev CLI
+
+```bash
+pnpm add -D @trigger.dev/cli
+```
+
+### Initialize Project
+
+```bash
+pnpm dlx trigger.dev@latest init
+```
+
+### Configure trigger.config.ts
+
+```typescript
+// trigger.config.ts
+import { defineConfig } from "@trigger.dev/sdk/v3"
+
+export default defineConfig({
+  project: "your-project-id",
+  dirs: ["./src/trigger"],
+})
+```
+</Steps>
+
+## Creating Tasks
+
+Tasks are defined in `src/trigger/`:
+
+### Basic Task
+
+```typescript
+// src/trigger/tasks.ts
+import { task } from "@trigger.dev/sdk/v3"
+
+export const helloWorld = task({
+  id: "hello-world",
+  run: async (payload: { name: string }) => {
+    console.log(`Hello, ${payload.name}!`)
+    return { message: `Hello, ${payload.name}!` }
+  },
+})
+```
+
+### Email Task
+
+```typescript
+// src/trigger/email-tasks.ts
+import { task } from "@trigger.dev/sdk/v3"
+import { sendWelcomeEmail, sendPasswordResetEmail } from "@/lib/email/send"
+
+export const sendWelcomeEmailTask = task({
+  id: "send-welcome-email",
+  retry: {
+    maxAttempts: 3,
+    factor: 2,
+    minTimeoutInMs: 1000,
+    maxTimeoutInMs: 10000,
+  },
+  run: async (payload: {
+    to: string
+    name: string
+    loginUrl: string
+  }) => {
+    await sendWelcomeEmail(payload.to, payload.name, payload.loginUrl)
+    return { success: true }
+  },
+})
+
+export const sendPasswordResetTask = task({
+  id: "send-password-reset",
+  run: async (payload: {
+    to: string
+    name: string
+    resetUrl: string
+  }) => {
+    await sendPasswordResetEmail(payload.to, payload.name, payload.resetUrl)
+    return { success: true }
+  },
+})
+```
+
+### AI Processing Task
+
+```typescript
+// src/trigger/ai-tasks.ts
+import { task } from "@trigger.dev/sdk/v3"
+import { generateText } from "ai"
+import { models } from "@/lib/ai/models"
+import { db } from "@/lib/db/client"
+import { aiJobs } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
+
+export const processAIJob = task({
+  id: "process-ai-job",
+  run: async (payload: {
+    jobId: string
+    prompt: string
+    model: string
+  }) => {
+    // Update job status
+    await db
+      .update(aiJobs)
+      .set({ status: "processing" })
+      .where(eq(aiJobs.id, payload.jobId))
+    
+    try {
+      const { text } = await generateText({
+        model: models[payload.model],
+        prompt: payload.prompt,
+      })
+      
+      // Save result
+      await db
+        .update(aiJobs)
+        .set({
+          status: "completed",
+          result: text,
+          completedAt: new Date(),
+        })
+        .where(eq(aiJobs.id, payload.jobId))
+      
+      return { success: true, text }
+    } catch (error) {
+      await db
+        .update(aiJobs)
+        .set({
+          status: "failed",
+          error: String(error),
+        })
+        .where(eq(aiJobs.id, payload.jobId))
+      
+      throw error
+    }
+  },
+})
+```
+
+## Triggering Tasks
+
+### From API Routes
+
+```typescript
+// app/api/jobs/route.ts
+import { NextResponse } from "next/server"
+import { sendWelcomeEmailTask } from "@/trigger/email-tasks"
+
+export async function POST(req: Request) {
+  const { email, name } = await req.json()
+  
+  // Trigger the task
+  const handle = await sendWelcomeEmailTask.trigger({
+    to: email,
+    name,
+    loginUrl: "https://yourapp.com/login",
+  })
+  
+  return NextResponse.json({
+    taskId: handle.id,
+    message: "Email job queued",
+  })
+}
+```
+
+### From Server Actions
+
+```typescript
+"use server"
+
+import { sendWelcomeEmailTask } from "@/trigger/email-tasks"
+
+export async function queueWelcomeEmail(email: string, name: string) {
+  await sendWelcomeEmailTask.trigger({
+    to: email,
+    name,
+    loginUrl: "https://yourapp.com/login",
+  })
+}
+```
+
+### Batch Triggering
+
+```typescript
+import { sendWelcomeEmailTask } from "@/trigger/email-tasks"
+
+const users = [
+  { email: "user1@example.com", name: "User 1" },
+  { email: "user2@example.com", name: "User 2" },
+]
+
+// Trigger multiple tasks
+await sendWelcomeEmailTask.batchTrigger(
+  users.map((user) => ({
+    payload: {
+      to: user.email,
+      name: user.name,
+      loginUrl: "https://yourapp.com/login",
+    },
+  }))
+)
+```
+
+## Scheduled Tasks
+
+### Cron Jobs
+
+```typescript
+// src/trigger/scheduled.ts
+import { schedules } from "@trigger.dev/sdk/v3"
+import { db } from "@/lib/db/client"
+import { aiUsage } from "@/lib/db/schema"
+import { lt } from "drizzle-orm"
+
+// Run every day at midnight
+export const cleanupOldData = schedules.task({
+  id: "cleanup-old-data",
+  cron: "0 0 * * *",
+  run: async () => {
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    
+    // Delete old AI usage records
+    await db
+      .delete(aiUsage)
+      .where(lt(aiUsage.createdAt, thirtyDaysAgo))
+    
+    return { success: true }
+  },
+})
+
+// Run every hour
+export const syncSubscriptions = schedules.task({
+  id: "sync-subscriptions",
+  cron: "0 * * * *",
+  run: async () => {
+    // Sync subscription statuses
+    return { success: true }
+  },
+})
+```
+
+### Delayed Tasks
+
+```typescript
+import { task } from "@trigger.dev/sdk/v3"
+
+export const sendFollowUp = task({
+  id: "send-follow-up",
+  run: async (payload: { userId: string }) => {
+    // Send follow-up email
+  },
+})
+
+// Trigger with delay
+await sendFollowUp.trigger(
+  { userId: "123" },
+  { delay: "1d" } // 1 day delay
+)
+
+// Or specific time
+await sendFollowUp.trigger(
+  { userId: "123" },
+  { delay: new Date("2024-12-25T00:00:00Z") }
+)
+```
+
+## Task Patterns
+
+### Sequential Steps
+
+```typescript
+import { task } from "@trigger.dev/sdk/v3"
+
+export const onboardUser = task({
+  id: "onboard-user",
+  run: async (payload: { userId: string; email: string; name: string }) => {
+    // Step 1: Create database record
+    const user = await createUserRecord(payload)
+    
+    // Step 2: Send welcome email
+    await sendWelcomeEmail(payload.email, payload.name)
+    
+    // Step 3: Set up default settings
+    await setupUserDefaults(payload.userId)
+    
+    // Step 4: Track analytics
+    await trackSignup(payload.userId)
+    
+    return { userId: user.id }
+  },
+})
+```
+
+### With Child Tasks
+
+```typescript
+import { task } from "@trigger.dev/sdk/v3"
+import { sendWelcomeEmailTask } from "./email-tasks"
+
+export const onboardUser = task({
+  id: "onboard-user",
+  run: async (payload: { userId: string; email: string; name: string }) => {
+    // Trigger child task and wait for result
+    const emailResult = await sendWelcomeEmailTask.triggerAndWait({
+      to: payload.email,
+      name: payload.name,
+      loginUrl: "https://yourapp.com/login",
+    })
+    
+    return { userId: payload.userId, emailSent: emailResult.ok }
+  },
+})
+```
+
+### Error Handling
+
+```typescript
+import { task } from "@trigger.dev/sdk/v3"
+
+export const riskyTask = task({
+  id: "risky-task",
+  retry: {
+    maxAttempts: 5,
+    factor: 2,
+    minTimeoutInMs: 1000,
+    maxTimeoutInMs: 60000,
+  },
+  onFailure: async (payload, error, { ctx }) => {
+    // Called after all retries exhausted
+    console.error(`Task ${ctx.task.id} failed:`, error)
+    
+    // Send alert notification
+    await sendAlertEmail({
+      subject: `Task Failed: ${ctx.task.id}`,
+      error: String(error),
+    })
+  },
+  run: async (payload: { data: string }) => {
+    // Task logic that might fail
+  },
+})
+```
+
+## Monitoring
+
+### Dashboard
+
+Access the Trigger.dev dashboard at [cloud.trigger.dev](https://cloud.trigger.dev/) to:
+
+- View running and completed tasks
+- Monitor task queues
+- View logs and errors
+- Replay failed tasks
+
+### Checking Task Status
+
+```typescript
+import { tasks } from "@trigger.dev/sdk/v3"
+import { sendWelcomeEmailTask } from "@/trigger/email-tasks"
+
+// Get run status
+const run = await tasks.retrieve(sendWelcomeEmailTask, "run-id")
+
+console.log(run.status) // "EXECUTING" | "COMPLETED" | "FAILED"
+console.log(run.output) // Task result
+```
+
+## Development
+
+### Run Dev Server
+
+```bash
+pnpm dlx trigger.dev@latest dev
+```
+
+This starts the local development server and connects to Trigger.dev.
+
+### Testing Tasks
+
+```typescript
+// Tests
+import { sendWelcomeEmailTask } from "@/trigger/email-tasks"
+
+describe("Email Tasks", () => {
+  it("should send welcome email", async () => {
+    const result = await sendWelcomeEmailTask.trigger({
+      to: "test@example.com",
+      name: "Test User",
+      loginUrl: "https://yourapp.com/login",
+    })
+    
+    expect(result.ok).toBe(true)
+  })
+})
+```
+
+## Best Practices
+
+<Callout type="info">
+  **Tips for background jobs:**
+</Callout>
+
+1. **Keep tasks idempotent** - Safe to retry
+2. **Use meaningful IDs** - Easy to identify in dashboard
+3. **Set appropriate retries** - Based on task nature
+4. **Log important steps** - For debugging
+5. **Handle failures gracefully** - Use onFailure hooks
+6. **Monitor queue depth** - Avoid backlogs
+
+## Next Steps
+
+- [Email](/email) - Send emails asynchronously
+- [AI Integration](/ai) - Process AI requests in background
+- [Webhook Handling](/webhook-handling) - Process webhooks async

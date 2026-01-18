@@ -1,0 +1,376 @@
+# Caching
+
+import { Tabs, Callout } from 'nextra/components'
+
+CraftJS uses [Upstash Redis](https://upstash.com/) for serverless caching and rate limiting.
+
+## Features
+
+- ✅ **Serverless Redis** - No connection management
+- ✅ **Rate Limiting** - Built-in rate limiter
+- ✅ **Session Storage** - Fast session lookups
+- ✅ **HTTP-based** - Works in edge functions
+- ✅ **Global Replication** - Low latency worldwide
+
+## Configuration
+
+### Environment Variables
+
+```env
+UPSTASH_REDIS_REST_URL="https://xxx.upstash.io"
+UPSTASH_REDIS_REST_TOKEN="your-token"
+```
+
+Create a Redis database at [Upstash Console](https://console.upstash.com/).
+
+### Redis Client
+
+Configure the client in `src/lib/cache/redis.ts`:
+
+```typescript
+import { Redis } from "@upstash/redis"
+import { env } from "@/env"
+
+export const redis = new Redis({
+  url: env.UPSTASH_REDIS_REST_URL,
+  token: env.UPSTASH_REDIS_REST_TOKEN,
+})
+```
+
+## Basic Operations
+
+### Set and Get
+
+```typescript
+import { redis } from "@/lib/cache/redis"
+
+// Set a value
+await redis.set("user:123", { name: "John", email: "john@example.com" })
+
+// Set with expiration (1 hour)
+await redis.set("session:abc", { userId: "123" }, { ex: 3600 })
+
+// Get a value
+const user = await redis.get<{ name: string; email: string }>("user:123")
+```
+
+### Delete
+
+```typescript
+// Delete single key
+await redis.del("user:123")
+
+// Delete multiple keys
+await redis.del("user:123", "user:456", "user:789")
+```
+
+### Check Existence
+
+```typescript
+const exists = await redis.exists("user:123")
+// Returns 1 if exists, 0 if not
+```
+
+### Increment/Decrement
+
+```typescript
+// Increment
+await redis.incr("page:views")
+
+// Increment by amount
+await redis.incrby("user:123:credits", 100)
+
+// Decrement
+await redis.decr("inventory:item:42")
+```
+
+## Rate Limiting
+
+CraftJS includes a pre-configured rate limiter using `@upstash/ratelimit`:
+
+### Setup
+
+```typescript
+// lib/cache/rate-limiter.ts
+import { Ratelimit } from "@upstash/ratelimit"
+import { redis } from "./redis"
+
+// Standard rate limiter - 10 requests per minute
+export const rateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(10, "1 m"),
+  analytics: true,
+  prefix: "ratelimit",
+})
+
+// AI rate limiter - stricter limits
+export const aiRateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(5, "1 m"),
+  analytics: true,
+  prefix: "ratelimit:ai",
+})
+```
+
+### Usage in API Routes
+
+```typescript
+import { rateLimit } from "@/lib/cache/rate-limiter"
+import { auth } from "@/lib/auth/server"
+import { headers } from "next/headers"
+
+export async function POST(req: Request) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+  
+  if (!session) {
+    return new Response("Unauthorized", { status: 401 })
+  }
+  
+  // Rate limit by user ID
+  const { success, remaining, reset } = await rateLimit.limit(session.user.id)
+  
+  if (!success) {
+    return new Response("Rate limit exceeded", {
+      status: 429,
+      headers: {
+        "X-RateLimit-Remaining": remaining.toString(),
+        "X-RateLimit-Reset": reset.toString(),
+        "Retry-After": Math.ceil((reset - Date.now()) / 1000).toString(),
+      },
+    })
+  }
+  
+  // Process request...
+}
+```
+
+### Plan-Based Rate Limits
+
+```typescript
+// lib/cache/rate-limiter.ts
+import { Ratelimit } from "@upstash/ratelimit"
+import { redis } from "./redis"
+
+const limiters = {
+  free: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(10, "1 m"),
+    prefix: "ratelimit:free",
+  }),
+  pro: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(100, "1 m"),
+    prefix: "ratelimit:pro",
+  }),
+  enterprise: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(1000, "1 m"),
+    prefix: "ratelimit:enterprise",
+  }),
+}
+
+export function getRateLimiter(plan: "free" | "pro" | "enterprise") {
+  return limiters[plan]
+}
+```
+
+## Caching Patterns
+
+### Cache-Aside Pattern
+
+```typescript
+import { redis } from "@/lib/cache/redis"
+import { db } from "@/lib/db/client"
+import { users } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
+
+export async function getUser(id: string) {
+  // Try cache first
+  const cached = await redis.get<typeof users.$inferSelect>(`user:${id}`)
+  
+  if (cached) {
+    return cached
+  }
+  
+  // Fetch from database
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1)
+  
+  if (user) {
+    // Cache for 5 minutes
+    await redis.set(`user:${id}`, user, { ex: 300 })
+  }
+  
+  return user
+}
+
+export async function invalidateUserCache(id: string) {
+  await redis.del(`user:${id}`)
+}
+```
+
+### Write-Through Pattern
+
+```typescript
+export async function updateUser(id: string, data: Partial<User>) {
+  // Update database
+  const [user] = await db
+    .update(users)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(users.id, id))
+    .returning()
+  
+  // Update cache
+  await redis.set(`user:${id}`, user, { ex: 300 })
+  
+  return user
+}
+```
+
+### Time-Based Caching
+
+```typescript
+export async function getPopularPosts() {
+  const cacheKey = "posts:popular"
+  
+  const cached = await redis.get<Post[]>(cacheKey)
+  if (cached) return cached
+  
+  const posts = await db.query.posts.findMany({
+    orderBy: (posts, { desc }) => [desc(posts.views)],
+    limit: 10,
+  })
+  
+  // Cache for 1 hour
+  await redis.set(cacheKey, posts, { ex: 3600 })
+  
+  return posts
+}
+```
+
+## Session Storage
+
+### Store Sessions in Redis
+
+```typescript
+// lib/cache/session.ts
+import { redis } from "./redis"
+
+interface SessionData {
+  userId: string
+  createdAt: number
+  data: Record<string, any>
+}
+
+const SESSION_TTL = 60 * 60 * 24 * 7 // 7 days
+
+export async function createSession(
+  sessionId: string,
+  userId: string,
+  data: Record<string, any> = {}
+) {
+  const session: SessionData = {
+    userId,
+    createdAt: Date.now(),
+    data,
+  }
+  
+  await redis.set(`session:${sessionId}`, session, { ex: SESSION_TTL })
+  
+  return session
+}
+
+export async function getSession(sessionId: string) {
+  return redis.get<SessionData>(`session:${sessionId}`)
+}
+
+export async function deleteSession(sessionId: string) {
+  await redis.del(`session:${sessionId}`)
+}
+
+export async function extendSession(sessionId: string) {
+  await redis.expire(`session:${sessionId}`, SESSION_TTL)
+}
+```
+
+## Pub/Sub (Coming Soon)
+
+Upstash Redis supports Pub/Sub for real-time features:
+
+```typescript
+// This is a preview - Upstash Pub/Sub is in development
+import { Redis } from "@upstash/redis"
+
+const publisher = new Redis({ ... })
+const subscriber = new Redis({ ... })
+
+// Publish message
+await publisher.publish("notifications", JSON.stringify({
+  userId: "123",
+  message: "New notification!",
+}))
+
+// Subscribe to channel
+// Note: Requires WebSocket connection
+```
+
+## Leaderboards
+
+Use sorted sets for leaderboards:
+
+```typescript
+// Add score
+await redis.zadd("leaderboard:weekly", {
+  score: 1500,
+  member: "user:123",
+})
+
+// Get top 10
+const topUsers = await redis.zrange("leaderboard:weekly", 0, 9, {
+  rev: true,
+  withScores: true,
+})
+
+// Get user rank
+const rank = await redis.zrevrank("leaderboard:weekly", "user:123")
+```
+
+## Best Practices
+
+<Callout type="info">
+  **Tips for effective caching:**
+</Callout>
+
+1. **Set appropriate TTLs** - Don't cache forever
+2. **Use consistent key naming** - `type:id:field` pattern
+3. **Invalidate on updates** - Keep cache fresh
+4. **Handle cache misses** - Always have fallback
+5. **Monitor cache hit rates** - Use Upstash analytics
+6. **Avoid caching sensitive data** - Or encrypt it
+
+### Key Naming Convention
+
+```typescript
+// Good key names
+"user:123"
+"user:123:profile"
+"session:abc123"
+"ratelimit:user:123"
+"cache:posts:popular"
+
+// Bad key names
+"123"
+"userProfile"
+"random-key-name"
+```
+
+## Next Steps
+
+- [AI Integration](/ai) - Rate limit AI requests
+- [Authentication](/authentication) - Session caching
+- [Database](/database) - Query caching strategies

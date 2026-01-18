@@ -1,0 +1,272 @@
+# Configuration
+
+import { Tabs, Callout } from 'nextra/components'
+
+CraftJS uses environment variables for configuration. This guide covers all available options.
+
+## Environment Variables
+
+Create a `.env` file in your project root based on `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+### Database
+
+```env
+# Neon PostgreSQL connection string
+DATABASE_URL="postgresql://username:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require"
+```
+
+<Callout type="info">
+  Get your connection string from [Neon Console](https://console.neon.tech/).
+</Callout>
+
+### Authentication
+
+```env
+# Better Auth secret (generate with: openssl rand -hex 32)
+BETTER_AUTH_SECRET="your-secret-key-at-least-32-characters"
+
+# The base URL of your application
+BETTER_AUTH_URL="http://localhost:3000"
+```
+
+#### OAuth Providers (Optional)
+
+<Tabs items={['Google', 'GitHub']}>
+  <Tabs.Tab>
+    ```env
+    GOOGLE_CLIENT_ID="your-google-client-id"
+    GOOGLE_CLIENT_SECRET="your-google-client-secret"
+    ```
+    
+    1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+    2. Create a new project or select existing
+    3. Enable Google+ API
+    4. Create OAuth 2.0 credentials
+    5. Add authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```env
+    GITHUB_CLIENT_ID="your-github-client-id"
+    GITHUB_CLIENT_SECRET="your-github-client-secret"
+    ```
+    
+    1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+    2. Create a new OAuth App
+    3. Set Homepage URL: `http://localhost:3000`
+    4. Set Authorization callback URL: `http://localhost:3000/api/auth/callback/github`
+  </Tabs.Tab>
+</Tabs>
+
+### AI Providers
+
+At least one AI provider is required:
+
+```env
+# OpenAI
+OPENAI_API_KEY="sk-..."
+
+# Anthropic
+ANTHROPIC_API_KEY="sk-ant-..."
+
+# Google AI
+GOOGLE_GENERATIVE_AI_API_KEY="..."
+```
+
+<Callout type="warning">
+  Keep your API keys secure and never commit them to version control.
+</Callout>
+
+### Payments
+
+```env
+# Dodo Payments
+DODO_API_KEY="your-dodo-api-key"
+DODO_WEBHOOK_SECRET="your-webhook-secret"
+```
+
+Get your API keys from [Dodo Payments Dashboard](https://dodopayments.com/).
+
+### Email
+
+```env
+# Resend
+RESEND_API_KEY="re_..."
+RESEND_FROM_EMAIL="noreply@yourdomain.com"
+```
+
+<Callout type="info">
+  Sign up at [Resend](https://resend.com/) and verify your domain for production use.
+</Callout>
+
+### Caching
+
+```env
+# Upstash Redis
+UPSTASH_REDIS_REST_URL="https://xxx.upstash.io"
+UPSTASH_REDIS_REST_TOKEN="your-token"
+```
+
+Create a Redis database at [Upstash Console](https://console.upstash.com/).
+
+### Storage
+
+```env
+# Cloudflare R2
+R2_ACCOUNT_ID="your-account-id"
+R2_ACCESS_KEY_ID="your-access-key"
+R2_SECRET_ACCESS_KEY="your-secret-key"
+R2_BUCKET_NAME="your-bucket-name"
+R2_PUBLIC_URL="https://pub-xxx.r2.dev"
+```
+
+### Analytics
+
+```env
+# PostHog
+NEXT_PUBLIC_POSTHOG_KEY="phc_..."
+NEXT_PUBLIC_POSTHOG_HOST="https://us.i.posthog.com"
+```
+
+### Customer Support
+
+```env
+# Tawk.to
+NEXT_PUBLIC_TAWK_PROPERTY_ID="your-property-id"
+NEXT_PUBLIC_TAWK_WIDGET_ID="your-widget-id"
+```
+
+### Background Jobs
+
+```env
+# Trigger.dev
+TRIGGER_SECRET_KEY="tr_..."
+```
+
+## Type-Safe Environment
+
+CraftJS uses [T3 Env](https://env.t3.gg/) for type-safe environment variables. The configuration is in `src/env.ts`:
+
+```typescript
+import { createEnv } from "@t3-oss/env-nextjs"
+import { z } from "zod"
+
+export const env = createEnv({
+  server: {
+    DATABASE_URL: z.string().url(),
+    BETTER_AUTH_SECRET: z.string().min(32),
+    OPENAI_API_KEY: z.string().optional(),
+    ANTHROPIC_API_KEY: z.string().optional(),
+    GOOGLE_GENERATIVE_AI_API_KEY: z.string().optional(),
+    // ... more server variables
+  },
+  client: {
+    NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
+    NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional(),
+    // ... more client variables
+  },
+  runtimeEnv: {
+    DATABASE_URL: process.env.DATABASE_URL,
+    // ... mapped values
+  },
+})
+```
+
+### Benefits
+
+- **Type Safety**: Get TypeScript errors for missing or invalid variables
+- **Validation**: Validates at build time, preventing runtime errors
+- **IntelliSense**: Full autocomplete support in your IDE
+
+### Usage
+
+```typescript
+import { env } from "@/env"
+
+// Server-side
+const dbUrl = env.DATABASE_URL  // ✅ Type-safe
+
+// Client-side (only NEXT_PUBLIC_ variables)
+const posthogKey = env.NEXT_PUBLIC_POSTHOG_KEY  // ✅ Type-safe
+```
+
+## Production Configuration
+
+### Environment-Specific Settings
+
+For production deployments, ensure these changes:
+
+```env
+# Production URLs
+BETTER_AUTH_URL="https://yourdomain.com"
+NEXT_PUBLIC_POSTHOG_HOST="https://us.i.posthog.com"
+
+# Production email
+RESEND_FROM_EMAIL="noreply@yourdomain.com"
+```
+
+### Vercel Deployment
+
+When deploying to Vercel:
+
+1. Go to your project settings
+2. Navigate to "Environment Variables"
+3. Add all required variables
+4. Select which environments they apply to (Production, Preview, Development)
+
+<Callout type="warning">
+  Never use development API keys in production. Create separate keys for each environment.
+</Callout>
+
+### Security Best Practices
+
+1. **Rotate secrets regularly** - Especially `BETTER_AUTH_SECRET`
+2. **Use separate API keys** - Different keys for dev, staging, production
+3. **Limit OAuth redirect URIs** - Only allow your actual domains
+4. **Enable IP restrictions** - Where supported by the service
+5. **Monitor API usage** - Set up alerts for unusual activity
+
+## Configuration Files
+
+### `next.config.ts`
+
+```typescript
+import type { NextConfig } from "next"
+
+const nextConfig: NextConfig = {
+  // Enable experimental features
+  experimental: {
+    turbo: {}, // Turbopack for faster development
+  },
+}
+
+export default nextConfig
+```
+
+### `drizzle.config.ts`
+
+```typescript
+import { defineConfig } from "drizzle-kit"
+
+export default defineConfig({
+  schema: "./src/lib/db/schema.ts",
+  out: "./drizzle",
+  dialect: "postgresql",
+  dbCredentials: {
+    url: process.env.DATABASE_URL!,
+  },
+})
+```
+
+### `tailwind.config.ts`
+
+CraftJS uses Tailwind CSS v4 with the new configuration format. Most configuration is done via CSS variables in your `globals.css`.
+
+## Next Steps
+
+- [Authentication](/authentication) - Configure auth providers
+- [AI Integration](/ai) - Set up AI models
+- [Database](/database) - Understand the schema

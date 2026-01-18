@@ -1,0 +1,361 @@
+# Payments API
+
+import { Tabs, Callout } from 'nextra/components'
+
+The Payments API handles subscriptions, checkouts, and billing management.
+
+## Create Checkout
+
+Create a checkout session for subscription purchase.
+
+```
+POST /api/checkout
+```
+
+**Request Body:**
+
+```json
+{
+  "planId": "pro"
+}
+```
+
+**Parameters:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `planId` | string | Yes | Plan ID (`pro`, `enterprise`) |
+
+**Response:**
+
+```json
+{
+  "url": "https://checkout.dodopayments.com/session_123",
+  "sessionId": "session_123"
+}
+```
+
+**Usage:**
+
+```typescript
+const response = await fetch("/api/checkout", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ planId: "pro" }),
+})
+
+const { url } = await response.json()
+window.location.href = url // Redirect to checkout
+```
+
+## Billing Portal
+
+Get a link to the customer billing portal.
+
+```
+POST /api/billing/portal
+```
+
+**Response:**
+
+```json
+{
+  "url": "https://billing.dodopayments.com/portal_123"
+}
+```
+
+The billing portal allows users to:
+- View invoices
+- Update payment method
+- Cancel subscription
+- Change plan
+
+## Subscription Status
+
+Get the current user's subscription.
+
+```
+GET /api/billing/subscription
+```
+
+**Response:**
+
+```json
+{
+  "id": "sub_123",
+  "plan": "pro",
+  "status": "active",
+  "currentPeriodStart": "2024-01-01T00:00:00.000Z",
+  "currentPeriodEnd": "2024-02-01T00:00:00.000Z",
+  "cancelAtPeriodEnd": false
+}
+```
+
+**Status Values:**
+
+| Status | Description |
+|--------|-------------|
+| `active` | Subscription is active |
+| `past_due` | Payment failed, grace period |
+| `canceled` | Subscription canceled |
+| `trialing` | In trial period |
+
+## Cancel Subscription
+
+Request subscription cancellation.
+
+```
+POST /api/billing/cancel
+```
+
+**Request Body:**
+
+```json
+{
+  "reason": "Too expensive",
+  "feedback": "Optional additional feedback",
+  "cancelImmediately": false
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "cancelAtPeriodEnd": true,
+  "currentPeriodEnd": "2024-02-01T00:00:00.000Z"
+}
+```
+
+<Callout type="info">
+  By default, subscriptions cancel at the end of the billing period. Set `cancelImmediately: true` for immediate cancellation (no refund).
+</Callout>
+
+## Resume Subscription
+
+Resume a canceled subscription before period ends.
+
+```
+POST /api/billing/resume
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "status": "active"
+}
+```
+
+## Change Plan
+
+Upgrade or downgrade subscription.
+
+```
+POST /api/billing/change-plan
+```
+
+**Request Body:**
+
+```json
+{
+  "planId": "enterprise"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "plan": "enterprise",
+  "prorationAmount": 50.00,
+  "effectiveDate": "2024-01-15T00:00:00.000Z"
+}
+```
+
+## Payment History
+
+Get user's payment history.
+
+```
+GET /api/billing/payments
+```
+
+**Response:**
+
+```json
+{
+  "payments": [
+    {
+      "id": "pay_123",
+      "amount": 1900,
+      "currency": "usd",
+      "status": "succeeded",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "invoiceUrl": "https://..."
+    }
+  ],
+  "hasMore": false
+}
+```
+
+## Plans
+
+### Get Available Plans
+
+```
+GET /api/billing/plans
+```
+
+**Response:**
+
+```json
+{
+  "plans": [
+    {
+      "id": "free",
+      "name": "Free",
+      "price": 0,
+      "interval": "month",
+      "features": [
+        "100 AI requests/month",
+        "10MB storage",
+        "Basic support"
+      ],
+      "limits": {
+        "aiRequests": 100,
+        "storage": 10485760
+      }
+    },
+    {
+      "id": "pro",
+      "name": "Pro",
+      "price": 1900,
+      "interval": "month",
+      "features": [
+        "10,000 AI requests/month",
+        "10GB storage",
+        "Priority support",
+        "Advanced analytics"
+      ],
+      "limits": {
+        "aiRequests": 10000,
+        "storage": 10737418240
+      }
+    },
+    {
+      "id": "enterprise",
+      "name": "Enterprise",
+      "price": 9900,
+      "interval": "month",
+      "features": [
+        "Unlimited AI requests",
+        "100GB storage",
+        "24/7 dedicated support",
+        "Custom integrations",
+        "SSO"
+      ],
+      "limits": {
+        "aiRequests": -1,
+        "storage": 107374182400
+      }
+    }
+  ]
+}
+```
+
+## Client Usage
+
+<Tabs items={['React', 'JavaScript']}>
+  <Tabs.Tab>
+    ```tsx
+    "use client"
+    
+    import { useQuery, useMutation } from "@tanstack/react-query"
+    
+    export function useBilling() {
+      const subscription = useQuery({
+        queryKey: ["subscription"],
+        queryFn: () => fetch("/api/billing/subscription").then((r) => r.json()),
+      })
+      
+      const checkout = useMutation({
+        mutationFn: async (planId: string) => {
+          const res = await fetch("/api/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ planId }),
+          })
+          const { url } = await res.json()
+          window.location.href = url
+        },
+      })
+      
+      const openPortal = useMutation({
+        mutationFn: async () => {
+          const res = await fetch("/api/billing/portal", { method: "POST" })
+          const { url } = await res.json()
+          window.location.href = url
+        },
+      })
+      
+      return { subscription, checkout, openPortal }
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```javascript
+    // Create checkout
+    async function createCheckout(planId) {
+      const response = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId }),
+      })
+      const { url } = await response.json()
+      window.location.href = url
+    }
+    
+    // Get subscription
+    async function getSubscription() {
+      const response = await fetch("/api/billing/subscription")
+      return response.json()
+    }
+    
+    // Open billing portal
+    async function openBillingPortal() {
+      const response = await fetch("/api/billing/portal", { method: "POST" })
+      const { url } = await response.json()
+      window.location.href = url
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Webhooks
+
+Payment events are delivered via webhooks to `/api/webhooks/dodo`. See [Webhook Handling](/webhook-handling) for details.
+
+**Events:**
+
+| Event | Description |
+|-------|-------------|
+| `payment.succeeded` | Payment successful |
+| `payment.failed` | Payment failed |
+| `subscription.created` | New subscription |
+| `subscription.updated` | Plan change |
+| `subscription.canceled` | Subscription canceled |
+| `subscription.past_due` | Payment overdue |
+
+## Error Codes
+
+| Code | Description |
+|------|-------------|
+| `PLAN_NOT_FOUND` | Invalid plan ID |
+| `ALREADY_SUBSCRIBED` | Already has this plan |
+| `NO_SUBSCRIPTION` | No active subscription |
+| `PAYMENT_REQUIRED` | Payment method needed |
+| `CHECKOUT_FAILED` | Checkout creation failed |

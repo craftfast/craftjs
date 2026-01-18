@@ -1,0 +1,263 @@
+# Project Structure
+
+import { FileTree, Callout } from 'nextra/components'
+
+Understanding the project structure will help you navigate and extend CraftJS effectively.
+
+## Overview
+
+CraftJS follows a well-organized structure that separates concerns and makes it easy to find what you're looking for.
+
+<FileTree>
+  <FileTree.Folder name="src" defaultOpen>
+    <FileTree.Folder name="app" defaultOpen>
+      <FileTree.Folder name="(auth)">
+        <FileTree.File name="login/page.tsx" />
+        <FileTree.File name="register/page.tsx" />
+        <FileTree.File name="forgot-password/page.tsx" />
+      </FileTree.Folder>
+      <FileTree.Folder name="(dashboard)">
+        <FileTree.File name="dashboard/page.tsx" />
+        <FileTree.File name="settings/page.tsx" />
+        <FileTree.File name="chat/page.tsx" />
+      </FileTree.Folder>
+      <FileTree.Folder name="api">
+        <FileTree.File name="auth/[...all]/route.ts" />
+        <FileTree.File name="chat/route.ts" />
+        <FileTree.File name="webhooks/dodo/route.ts" />
+      </FileTree.Folder>
+      <FileTree.File name="layout.tsx" />
+      <FileTree.File name="page.tsx" />
+    </FileTree.Folder>
+    <FileTree.Folder name="components" defaultOpen>
+      <FileTree.Folder name="layout">
+        <FileTree.File name="sidebar.tsx" />
+        <FileTree.File name="header.tsx" />
+        <FileTree.File name="footer.tsx" />
+      </FileTree.Folder>
+      <FileTree.Folder name="providers">
+        <FileTree.File name="theme-provider.tsx" />
+        <FileTree.File name="query-provider.tsx" />
+      </FileTree.Folder>
+      <FileTree.Folder name="settings">
+        <FileTree.File name="profile-form.tsx" />
+        <FileTree.File name="billing-section.tsx" />
+      </FileTree.Folder>
+      <FileTree.Folder name="ui">
+        <FileTree.File name="button.tsx" />
+        <FileTree.File name="card.tsx" />
+        <FileTree.File name="..." />
+      </FileTree.Folder>
+    </FileTree.Folder>
+    <FileTree.Folder name="lib" defaultOpen>
+      <FileTree.Folder name="ai">
+        <FileTree.File name="models.ts" />
+        <FileTree.File name="prompts.ts" />
+        <FileTree.File name="tools.ts" />
+      </FileTree.Folder>
+      <FileTree.Folder name="auth">
+        <FileTree.File name="client.ts" />
+        <FileTree.File name="server.ts" />
+      </FileTree.Folder>
+      <FileTree.Folder name="cache">
+        <FileTree.File name="redis.ts" />
+        <FileTree.File name="rate-limiter.ts" />
+      </FileTree.Folder>
+      <FileTree.Folder name="db">
+        <FileTree.File name="client.ts" />
+        <FileTree.File name="schema.ts" />
+      </FileTree.Folder>
+      <FileTree.Folder name="email">
+        <FileTree.File name="client.ts" />
+        <FileTree.File name="templates/" />
+      </FileTree.Folder>
+      <FileTree.Folder name="payments">
+        <FileTree.File name="client.ts" />
+        <FileTree.File name="plans.ts" />
+      </FileTree.Folder>
+      <FileTree.Folder name="storage">
+        <FileTree.File name="r2.ts" />
+      </FileTree.Folder>
+      <FileTree.Folder name="analytics">
+        <FileTree.File name="posthog.ts" />
+      </FileTree.Folder>
+    </FileTree.Folder>
+    <FileTree.Folder name="trigger">
+      <FileTree.File name="tasks.ts" />
+    </FileTree.Folder>
+    <FileTree.File name="env.ts" />
+    <FileTree.File name="proxy.ts" />
+  </FileTree.Folder>
+  <FileTree.File name="drizzle.config.ts" />
+  <FileTree.File name="next.config.ts" />
+  <FileTree.File name="package.json" />
+  <FileTree.File name="tailwind.config.ts" />
+  <FileTree.File name="tsconfig.json" />
+</FileTree>
+
+## Directory Details
+
+### `/src/app` - Next.js App Router
+
+The `app` directory contains all your routes using the Next.js App Router convention.
+
+#### Route Groups
+
+- **`(auth)`** - Authentication pages (login, register, forgot password)
+- **`(dashboard)`** - Protected dashboard pages that require authentication
+
+<Callout type="info">
+  Route groups (folders with parentheses) don't affect the URL structure. They're used for organization and sharing layouts.
+</Callout>
+
+#### API Routes
+
+The `api` folder contains all backend API endpoints:
+
+```
+api/
+├── auth/[...all]/route.ts  # Better Auth handler
+├── chat/route.ts           # AI chat endpoint
+└── webhooks/
+    └── dodo/route.ts       # Payment webhooks
+```
+
+### `/src/components` - React Components
+
+Organized by purpose:
+
+| Folder | Purpose |
+|--------|---------|
+| `layout/` | Dashboard layout components (sidebar, header, footer) |
+| `providers/` | React context providers (theme, query, etc.) |
+| `settings/` | Settings page components |
+| `ui/` | shadcn/ui components |
+
+### `/src/lib` - Business Logic
+
+This is where the core functionality lives:
+
+#### `lib/ai/`
+AI-related code including model configuration, prompts, and custom tools.
+
+```typescript
+// lib/ai/models.ts
+export const models = {
+  "gpt-4o": openai("gpt-4o"),
+  "claude-sonnet-4": anthropic("claude-sonnet-4-20250514"),
+  "gemini-2-flash": google("gemini-2.0-flash"),
+}
+```
+
+#### `lib/auth/`
+Better Auth configuration for both client and server.
+
+#### `lib/cache/`
+Redis client and rate limiting utilities.
+
+#### `lib/db/`
+Drizzle ORM client and database schema definitions.
+
+#### `lib/email/`
+Resend client and React Email templates.
+
+#### `lib/payments/`
+Dodo Payments integration and subscription plan definitions.
+
+#### `lib/storage/`
+Cloudflare R2 storage utilities.
+
+#### `lib/analytics/`
+PostHog client for product analytics.
+
+### `/src/trigger` - Background Jobs
+
+Trigger.dev tasks for async processing:
+
+```typescript
+// trigger/tasks.ts
+export const sendWelcomeEmail = task({
+  id: "send-welcome-email",
+  run: async (payload: { userId: string }) => {
+    // Send email logic
+  },
+})
+```
+
+### Key Files
+
+#### `env.ts`
+Environment variable validation using T3 Env:
+
+```typescript
+export const env = createEnv({
+  server: {
+    DATABASE_URL: z.string().url(),
+    BETTER_AUTH_SECRET: z.string().min(32),
+    // ...
+  },
+  client: {
+    NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
+    // ...
+  },
+})
+```
+
+#### `proxy.ts`
+Next.js middleware for route protection:
+
+```typescript
+export default defineMiddleware((request) => {
+  // Protect dashboard routes
+  // Redirect unauthenticated users to login
+})
+```
+
+## Conventions
+
+### File Naming
+
+- **Components**: PascalCase (`Button.tsx`, `UserProfile.tsx`)
+- **Utilities**: camelCase (`formatDate.ts`, `parseQuery.ts`)
+- **Constants**: SCREAMING_SNAKE_CASE for values, camelCase for files
+
+### Import Aliases
+
+CraftJS uses path aliases for cleaner imports:
+
+```typescript
+// Instead of
+import { Button } from "../../../components/ui/button"
+
+// Use
+import { Button } from "@/components/ui/button"
+```
+
+### Colocation
+
+Related files are colocated:
+- Component + its styles
+- Route + its loading/error states
+- API route + its validation schema
+
+## Customization
+
+### Adding New Features
+
+1. **New Route**: Add a folder in `app/` with a `page.tsx`
+2. **New API**: Add a `route.ts` in `app/api/`
+3. **New Component**: Add to appropriate `components/` subfolder
+4. **New Library**: Add to `lib/` with clear module boundaries
+
+### Removing Features
+
+Each feature is self-contained. To remove:
+
+1. Delete the relevant folders/files
+2. Remove related environment variables
+3. Remove imports and usages
+4. Run `pnpm build` to check for broken imports
+
+<Callout type="warning">
+  When removing features like payments or analytics, make sure to also remove the related provider wrappers in `layout.tsx`.
+</Callout>

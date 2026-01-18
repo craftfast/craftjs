@@ -1,0 +1,15 @@
+{
+  "name": "@craftjs/prettier-config",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js"
+  ],
+  "devDependencies": {
+    "prettier": "^3.8.0",
+    "prettier-plugin-tailwindcss": "^0.7.2"
+  }
+}

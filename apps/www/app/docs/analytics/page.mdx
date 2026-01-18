@@ -1,0 +1,456 @@
+# Analytics
+
+import { Tabs, Callout } from 'nextra/components'
+
+CraftJS integrates [PostHog](https://posthog.com/) for product analytics and feature flags.
+
+## Features
+
+- ✅ **Event Tracking** - Track user actions
+- ✅ **User Identification** - Link events to users
+- ✅ **Feature Flags** - Roll out features gradually
+- ✅ **Session Recording** - Watch user sessions
+- ✅ **A/B Testing** - Experiment with features
+
+## Configuration
+
+### Environment Variables
+
+```env
+NEXT_PUBLIC_POSTHOG_KEY="phc_..."
+NEXT_PUBLIC_POSTHOG_HOST="https://us.i.posthog.com"
+```
+
+Sign up at [PostHog](https://posthog.com/) to get your project API key.
+
+### PostHog Provider
+
+Set up the provider in `src/components/providers/analytics-provider.tsx`:
+
+```tsx
+"use client"
+
+import posthog from "posthog-js"
+import { PostHogProvider as PHProvider } from "posthog-js/react"
+import { useEffect } from "react"
+import { env } from "@/env"
+
+export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    if (env.NEXT_PUBLIC_POSTHOG_KEY) {
+      posthog.init(env.NEXT_PUBLIC_POSTHOG_KEY, {
+        api_host: env.NEXT_PUBLIC_POSTHOG_HOST,
+        capture_pageview: true,
+        capture_pageleave: true,
+        autocapture: true,
+      })
+    }
+  }, [])
+  
+  if (!env.NEXT_PUBLIC_POSTHOG_KEY) {
+    return <>{children}</>
+  }
+  
+  return <PHProvider client={posthog}>{children}</PHProvider>
+}
+```
+
+### Add to Layout
+
+```tsx
+// app/layout.tsx
+import { AnalyticsProvider } from "@/components/providers/analytics-provider"
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        <AnalyticsProvider>
+          {children}
+        </AnalyticsProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+## Event Tracking
+
+### Track Custom Events
+
+<Tabs items={['Hook', 'Direct']}>
+  <Tabs.Tab>
+    ```tsx
+    "use client"
+    
+    import { usePostHog } from "posthog-js/react"
+    
+    export function UpgradeButton() {
+      const posthog = usePostHog()
+      
+      const handleClick = () => {
+        posthog.capture("upgrade_clicked", {
+          plan: "pro",
+          source: "dashboard",
+        })
+        
+        // Navigate to upgrade page
+      }
+      
+      return <button onClick={handleClick}>Upgrade to Pro</button>
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```tsx
+    import posthog from "posthog-js"
+    
+    // Track event
+    posthog.capture("form_submitted", {
+      form_name: "contact",
+      fields_filled: 5,
+    })
+    
+    // Track with timestamp
+    posthog.capture("purchase_completed", {
+      amount: 99,
+      currency: "USD",
+      plan: "pro",
+    })
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Common Events to Track
+
+```typescript
+// User signed up
+posthog.capture("user_signed_up", {
+  method: "email", // or "google", "github"
+})
+
+// User signed in
+posthog.capture("user_signed_in", {
+  method: "email",
+})
+
+// Feature used
+posthog.capture("feature_used", {
+  feature: "ai_chat",
+  model: "gpt-4o",
+})
+
+// Subscription started
+posthog.capture("subscription_started", {
+  plan: "pro",
+  billing_period: "monthly",
+  price: 19,
+})
+
+// AI request made
+posthog.capture("ai_request", {
+  model: "gpt-4o",
+  tokens: 1500,
+  success: true,
+})
+```
+
+## User Identification
+
+### Identify Users After Login
+
+```tsx
+"use client"
+
+import { usePostHog } from "posthog-js/react"
+import { useSession } from "@/lib/auth/client"
+import { useEffect } from "react"
+
+export function UserIdentifier() {
+  const posthog = usePostHog()
+  const { data: session } = useSession()
+  
+  useEffect(() => {
+    if (session?.user) {
+      posthog.identify(session.user.id, {
+        email: session.user.email,
+        name: session.user.name,
+        plan: session.user.plan,
+        created_at: session.user.createdAt,
+      })
+    }
+  }, [session, posthog])
+  
+  return null
+}
+```
+
+### Reset on Logout
+
+```tsx
+import posthog from "posthog-js"
+
+export function handleLogout() {
+  posthog.reset() // Clear user identity
+  // ... rest of logout logic
+}
+```
+
+## Feature Flags
+
+### Check Feature Flag
+
+```tsx
+"use client"
+
+import { usePostHog, useFeatureFlagEnabled } from "posthog-js/react"
+
+export function NewFeature() {
+  const isEnabled = useFeatureFlagEnabled("new-ai-model")
+  
+  if (!isEnabled) {
+    return null
+  }
+  
+  return <div>Check out our new AI model!</div>
+}
+```
+
+### Feature Flag with Payload
+
+```tsx
+import { useFeatureFlagPayload } from "posthog-js/react"
+
+export function DynamicBanner() {
+  const payload = useFeatureFlagPayload("banner-config")
+  
+  if (!payload) return null
+  
+  return (
+    <div style={{ backgroundColor: payload.color }}>
+      {payload.message}
+    </div>
+  )
+}
+```
+
+### Server-Side Feature Flags
+
+```typescript
+// lib/analytics/posthog-server.ts
+import { PostHog } from "posthog-node"
+import { env } from "@/env"
+
+export const posthogServer = new PostHog(env.NEXT_PUBLIC_POSTHOG_KEY!, {
+  host: env.NEXT_PUBLIC_POSTHOG_HOST,
+})
+
+// Usage in API route
+export async function GET(req: Request) {
+  const userId = "user-123"
+  
+  const isEnabled = await posthogServer.isFeatureEnabled(
+    "new-feature",
+    userId
+  )
+  
+  if (isEnabled) {
+    // Return new feature response
+  }
+  
+  // Return standard response
+}
+```
+
+## A/B Testing
+
+### Create Experiment
+
+1. Go to PostHog Dashboard > Experiments
+2. Create new experiment
+3. Set feature flag and variants
+
+### Use in Code
+
+```tsx
+"use client"
+
+import { useFeatureFlagVariantKey } from "posthog-js/react"
+
+export function PricingPage() {
+  const variant = useFeatureFlagVariantKey("pricing-experiment")
+  
+  if (variant === "control") {
+    return <OriginalPricing />
+  }
+  
+  if (variant === "test") {
+    return <NewPricing />
+  }
+  
+  return <OriginalPricing /> // Fallback
+}
+```
+
+### Track Experiment Results
+
+```typescript
+// Track conversion
+posthog.capture("experiment_conversion", {
+  experiment: "pricing-experiment",
+  variant: variant,
+  converted: true,
+  value: 99, // Revenue
+})
+```
+
+## Session Recording
+
+### Enable Recording
+
+```typescript
+posthog.init(env.NEXT_PUBLIC_POSTHOG_KEY, {
+  api_host: env.NEXT_PUBLIC_POSTHOG_HOST,
+  session_recording: {
+    maskAllInputs: true, // Mask sensitive inputs
+    maskTextSelector: ".sensitive", // Custom mask
+  },
+})
+```
+
+### Control Recording
+
+```typescript
+// Start recording
+posthog.startSessionRecording()
+
+// Stop recording
+posthog.stopSessionRecording()
+
+// Check if recording
+const isRecording = posthog.sessionRecordingStarted()
+```
+
+## Analytics Utility
+
+Create a utility file for consistent tracking:
+
+```typescript
+// lib/analytics/track.ts
+import posthog from "posthog-js"
+
+export const analytics = {
+  // Page views
+  pageView: (pageName: string, properties?: Record<string, any>) => {
+    posthog.capture("$pageview", {
+      $current_url: window.location.href,
+      page_name: pageName,
+      ...properties,
+    })
+  },
+  
+  // User actions
+  signUp: (method: "email" | "google" | "github") => {
+    posthog.capture("user_signed_up", { method })
+  },
+  
+  signIn: (method: "email" | "google" | "github") => {
+    posthog.capture("user_signed_in", { method })
+  },
+  
+  // AI usage
+  aiRequest: (model: string, tokens: number, success: boolean) => {
+    posthog.capture("ai_request", { model, tokens, success })
+  },
+  
+  // Billing
+  subscriptionStarted: (plan: string, price: number) => {
+    posthog.capture("subscription_started", { plan, price })
+  },
+  
+  subscriptionCanceled: (plan: string, reason?: string) => {
+    posthog.capture("subscription_canceled", { plan, reason })
+  },
+  
+  // Feature usage
+  featureUsed: (feature: string, properties?: Record<string, any>) => {
+    posthog.capture("feature_used", { feature, ...properties })
+  },
+}
+```
+
+Usage:
+
+```tsx
+import { analytics } from "@/lib/analytics/track"
+
+// On sign up
+analytics.signUp("google")
+
+// On AI request
+analytics.aiRequest("gpt-4o", 1500, true)
+
+// On feature use
+analytics.featureUsed("export_data", { format: "csv" })
+```
+
+## Privacy & Compliance
+
+### Opt-Out Support
+
+```tsx
+"use client"
+
+import posthog from "posthog-js"
+import { useState } from "react"
+
+export function CookieConsent() {
+  const [consented, setConsented] = useState(false)
+  
+  const handleAccept = () => {
+    posthog.opt_in_capturing()
+    setConsented(true)
+  }
+  
+  const handleDecline = () => {
+    posthog.opt_out_capturing()
+    setConsented(true)
+  }
+  
+  if (consented) return null
+  
+  return (
+    <div className="cookie-banner">
+      <p>We use analytics to improve our product.</p>
+      <button onClick={handleAccept}>Accept</button>
+      <button onClick={handleDecline}>Decline</button>
+    </div>
+  )
+}
+```
+
+### Check Opt-Out Status
+
+```typescript
+const hasOptedOut = posthog.has_opted_out_capturing()
+const hasOptedIn = posthog.has_opted_in_capturing()
+```
+
+## Best Practices
+
+<Callout type="info">
+  **Tips for effective analytics:**
+</Callout>
+
+1. **Track meaningful events** - Focus on user value
+2. **Use consistent naming** - `noun_verb` pattern
+3. **Include context** - Add relevant properties
+4. **Respect privacy** - Implement opt-out
+5. **Don't over-track** - Quality over quantity
+6. **Review regularly** - Clean up unused events
+
+## Next Steps
+
+- [Authentication](/authentication) - Track auth events
+- [AI Integration](/ai) - Monitor AI usage
+- [Payments](/payments) - Track conversions

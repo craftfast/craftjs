@@ -1,5 +1,9 @@
 packages:
-  - .
+  - "apps/*"
+  - "packages/*"
+  - "!packages/create-craft-app/template"
+  - "tooling/*"
+
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver

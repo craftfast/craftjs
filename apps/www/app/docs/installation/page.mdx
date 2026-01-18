@@ -1,0 +1,181 @@
+# Installation
+
+import { Steps, Callout, Tabs } from "nextra/components";
+
+This guide will help you set up CraftJS and get your AI app running in minutes.
+
+## Prerequisites
+
+Before you begin, make sure you have the following installed:
+
+- **Node.js 20+** - [Download](https://nodejs.org/)
+- **pnpm 9+** - Install with `npm install -g pnpm`
+- **PostgreSQL database** - We recommend [Neon](https://neon.tech/) for serverless PostgreSQL
+
+<Callout type="info">
+  CraftJS uses pnpm as the package manager for its faster installation and disk
+  space efficiency.
+</Callout>
+
+## Installation Steps
+
+<Steps>
+### Create a New Project
+
+Use the CLI to create a new CraftJS application:
+
+```bash
+npx create-craft-app my-ai-app
+```
+
+Or with other package managers:
+
+```bash
+# With pnpm
+pnpm create craft-app my-ai-app
+
+# With yarn
+yarn create craft-app my-ai-app
+
+# With bun
+bunx create-craft-app my-ai-app
+```
+
+The CLI will guide you through the setup process and install all dependencies automatically.
+
+## CLI Options
+
+The `create-craft-app` CLI supports the following options:
+
+| Option           | Description                                   |
+| ---------------- | --------------------------------------------- |
+| `[project-name]` | Name of the project (default: `my-craft-app`) |
+| `-y, --yes`      | Skip all prompts and use defaults             |
+| `--use-npm`      | Use npm as the package manager                |
+| `--use-yarn`     | Use yarn as the package manager               |
+| `--use-pnpm`     | Use pnpm as the package manager (recommended) |
+| `--use-bun`      | Use bun as the package manager                |
+
+### Interactive Mode
+
+By default, the CLI runs in interactive mode and will prompt you for:
+
+1. **Project name** - What your project will be called
+2. **Package manager** - Choose between pnpm (recommended), npm, yarn, or bun
+3. **Confirmation** - Review your choices before creating the project
+
+### Non-Interactive Mode
+
+Use the `-y` or `--yes` flag to skip all prompts:
+
+```bash
+npx create-craft-app my-app -y --use-pnpm
+```
+
+This will install all required dependencies including:
+
+- Next.js 16
+- Tailwind CSS v4
+- shadcn/ui components
+- Better Auth
+- Drizzle ORM
+- Vercel AI SDK 6
+- And more...
+
+### Configure Environment Variables
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and fill in your values. See the [Configuration](/configuration) page for detailed instructions on each variable.
+
+### Set Up the Database
+
+Push the database schema to your PostgreSQL database:
+
+```bash
+pnpm db:push
+```
+
+<Callout type="warning">
+  Make sure your `DATABASE_URL` is correctly set in `.env` before running this
+  command.
+</Callout>
+
+### Start the Development Server
+
+```bash
+pnpm dev
+```
+
+Your app will be running at [http://localhost:3000](http://localhost:3000).
+
+</Steps>
+
+## Quick Setup with Neon
+
+If you don't have a PostgreSQL database yet, here's how to set one up with Neon:
+
+<Steps>
+### Create a Neon Account
+
+Go to [neon.tech](https://neon.tech/) and sign up for a free account.
+
+### Create a New Project
+
+Click "New Project" and give it a name (e.g., "my-ai-app").
+
+### Copy the Connection String
+
+In your project dashboard, find the connection string and copy it.
+
+### Update Your Environment
+
+Add the connection string to your `.env` file:
+
+```env
+DATABASE_URL="postgresql://username:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require"
+```
+
+</Steps>
+
+## Verifying Installation
+
+After starting the development server, you should see:
+
+1. **Landing Page** - A beautiful landing page at `/`
+2. **Auth Pages** - Login (`/login`) and Register (`/register`) pages
+3. **Dashboard** - Protected dashboard at `/dashboard` (after signing in)
+
+## Available Scripts
+
+| Command             | Description                             |
+| ------------------- | --------------------------------------- |
+| `pnpm dev`          | Start development server with Turbopack |
+| `pnpm build`        | Build for production                    |
+| `pnpm start`        | Start production server                 |
+| `pnpm lint`         | Run ESLint                              |
+| `pnpm format`       | Format code with Prettier               |
+| `pnpm format:check` | Check formatting                        |
+| `pnpm db:push`      | Push schema changes to database         |
+| `pnpm db:studio`    | Open Drizzle Studio                     |
+| `pnpm db:generate`  | Generate migrations                     |
+| `pnpm db:migrate`   | Run migrations                          |
+
+## Next Steps
+
+Now that you have CraftJS running, explore:
+
+- [Project Structure](/project-structure) - Understand how the codebase is organized
+- [Configuration](/configuration) - Set up all environment variables
+- [Authentication](/authentication) - Configure auth providers
+- [AI Integration](/ai) - Start building with AI
+
+<Callout type="info">
+  Having issues? Check our [GitHub
+  Issues](https://github.com/craftfast/craftjs/issues) or join the
+  [Discussions](https://github.com/craftfast/craftjs/discussions).
+</Callout>

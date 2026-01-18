@@ -1,0 +1,198 @@
+# Welcome to CraftJS
+
+import { Cards, Steps, Callout, Tabs } from "nextra/components";
+
+<div className="mt-8 mb-12 text-center">
+  <h1 className="mb-4 text-5xl font-bold">
+    <span className="text-foreground">Craft</span>
+    <span className="text-emerald-600">JS</span>
+    <span className="ml-3 rounded-full bg-emerald-100 px-3 py-1 align-middle text-sm text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+      100% Open Source
+    </span>
+  </h1>
+  <p className="mx-auto max-w-2xl text-xl text-neutral-600 dark:text-neutral-400">
+    A free and open-source Next.js boilerplate to craft AI apps faster 🚀
+  </p>
+
+  <div className="mt-8 flex justify-center gap-4">
+    <a
+      href="/docs/installation"
+      className="rounded-lg bg-emerald-600 px-6 py-3 font-medium text-white transition-colors hover:bg-emerald-700"
+    >
+      Get Started
+    </a>
+    <a
+      href="https://github.com/craftfast/craftjs"
+      target="_blank"
+      className="rounded-lg border border-neutral-300 px-6 py-3 font-medium transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+    >
+      ⭐ Star on GitHub
+    </a>
+  </div>
+</div>
+
+## Why CraftJS?
+
+CraftJS provides everything you need to build production-ready AI applications with Next.js. **100% free and open source** — no hidden costs, no premium tiers. Stop wasting time on boilerplate and focus on what makes your app unique.
+
+<Cards>
+  <Cards.Card title="🤖 Multi-Provider AI" href="/docs/ai">
+    OpenAI, Anthropic, and Google AI models with Vercel AI SDK 6
+  </Cards.Card>
+  <Cards.Card title="🔐 Authentication" href="/docs/authentication">
+    Email/password + OAuth (Google, GitHub) with Better Auth
+  </Cards.Card>
+  <Cards.Card title="💾 Database" href="/docs/database">
+    PostgreSQL with Neon serverless + Drizzle ORM
+  </Cards.Card>
+  <Cards.Card title="💳 Payments" href="/docs/payments">
+    Subscription billing with Dodo Payments
+  </Cards.Card>
+  <Cards.Card title="📧 Emails" href="/docs/email">
+    React Email templates with Resend
+  </Cards.Card>
+  <Cards.Card title="🔄 Background Jobs" href="/docs/background-jobs">
+    Trigger.dev for async tasks
+  </Cards.Card>
+</Cards>
+
+## Tech Stack
+
+| Category            | Technology                                  |
+| ------------------- | ------------------------------------------- |
+| **Framework**       | Next.js 16 with App Router & Turbopack      |
+| **Language**        | TypeScript 5.9                              |
+| **Styling**         | Tailwind CSS v4 + shadcn/ui                 |
+| **Database**        | Neon PostgreSQL + Drizzle ORM               |
+| **Authentication**  | Better Auth                                 |
+| **AI**              | Vercel AI SDK 6 (OpenAI, Anthropic, Google) |
+| **Payments**        | Dodo Payments                               |
+| **Email**           | Resend + React Email                        |
+| **Cache**           | Upstash Redis                               |
+| **Storage**         | Cloudflare R2                               |
+| **Background Jobs** | Trigger.dev                                 |
+| **Analytics**       | PostHog                                     |
+| **Support**         | Tawk.to                                     |
+| **Deployment**      | Vercel                                      |
+
+## Quick Start
+
+<Steps>
+### Create a new project
+
+```bash
+npx create-craft-app my-app
+cd my-app
+```
+
+### Set up environment variables
+
+```bash
+cp .env.example .env
+```
+
+### Set up the database
+
+```bash
+pnpm db:push
+```
+
+### Run the development server
+
+```bash
+pnpm dev
+```
+
+</Steps>
+
+Open [http://localhost:3000](http://localhost:3000) to see your app.
+
+<Callout type="info">
+  Check out the [Installation Guide](/docs/installation) for detailed setup instructions.
+</Callout>
+
+## Features at a Glance
+
+### 🤖 AI Integration
+
+- Multiple AI providers (OpenAI, Anthropic, Google)
+- Streaming responses
+- Tool calling support
+- Rate limiting per user
+- Usage tracking
+
+### 🔐 Authentication
+
+- Email/password with email verification
+- OAuth providers (Google, GitHub)
+- Secure cookie-based sessions
+- Protected routes with proxy middleware
+
+### 💾 Database
+
+- Serverless PostgreSQL with Neon
+- Type-safe queries with Drizzle ORM
+- Automatic migrations
+- Visual database browser with Drizzle Studio
+
+### 💳 Payments
+
+- Subscription billing with Dodo Payments
+- Pre-configured plans (Free, Pro, Enterprise)
+- Webhook handling
+- Usage-based billing support
+
+### 📧 Email
+
+- Beautiful email templates with React Email
+- Transactional emails via Resend
+- Welcome, verification, and notification emails
+
+### ⚡ Performance
+
+- Redis caching with Upstash
+- Rate limiting
+- Background job processing
+- Optimized for Vercel Edge
+
+## Vibe Code Faster with craft.fast
+
+<Callout type="default" emoji="✨">
+  **Want to build even faster?** Check out [craft.fast](https://craft.fast) — our vibe coding tools
+  to build AI apps at lightning speed with natural language prompts.
+</Callout>
+
+## Community
+
+<Cards>
+  <Cards.Card title="GitHub Discussions" href="https://github.com/craftfast/craftjs/discussions">
+    Ask questions and share ideas
+  </Cards.Card>
+  <Cards.Card title="Report Issues" href="https://github.com/craftfast/craftjs/issues">
+    Found a bug? Let us know
+  </Cards.Card>
+  <Cards.Card
+    title="Contributing"
+    href="https://github.com/craftfast/craftjs/blob/main/CONTRIBUTING.md"
+  >
+    Learn how to contribute
+  </Cards.Card>
+</Cards>
+
+## License
+
+CraftJS is open source and available under the [MIT License](https://github.com/craftfast/craftjs/blob/main/LICENSE).
+
+---
+
+<div className="mt-8 text-center text-neutral-500 dark:text-neutral-400">
+  Built with ❤️ by{" "}
+  <a
+    href="https://x.com/sudheerdotai"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="text-emerald-600 hover:underline"
+  >
+    @sudheerdotai
+  </a>
+</div>
