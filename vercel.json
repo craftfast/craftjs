@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/vercel.json",
+  "functions": {
+    "src/app/api/chat/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/webhooks/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "crons": []
+}
