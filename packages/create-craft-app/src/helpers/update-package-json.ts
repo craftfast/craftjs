@@ -13,7 +13,8 @@ export async function updatePackageJson(projectDir: string, projectName: string)
   // Update the name
   packageJson.name = projectName;
 
-  // Remove private flag if exists
+  // Remove private flag - user projects should not inherit the template's private: true
+  // This allows users to publish their package if desired
   delete packageJson.private;
 
   // Reset version

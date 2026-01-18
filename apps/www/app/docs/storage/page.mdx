@@ -1,6 +1,6 @@
 # Storage
 
-import { Tabs, Callout, Steps } from 'nextra/components'
+import { Tabs, Callout, Steps } from "nextra/components";
 
 CraftJS uses [Cloudflare R2](https://www.cloudflare.com/products/r2/) for S3-compatible object storage with zero egress fees.
 
@@ -42,18 +42,19 @@ R2_PUBLIC_URL="https://pub-xxx.r2.dev"
 ### Configure Public Access (Optional)
 
 For public files:
+
 1. Go to your bucket settings
 2. Enable "Public Access"
 3. Copy the public URL
-</Steps>
+   </Steps>
 
 ## Storage Client
 
 Configure the R2 client in `src/lib/storage/r2.ts`:
 
 ```typescript
-import { S3Client } from "@aws-sdk/client-s3"
-import { env } from "@/env"
+import { S3Client } from "@aws-sdk/client-s3";
+import { env } from "@/env";
 
 export const r2 = new S3Client({
   region: "auto",
@@ -62,10 +63,10 @@ export const r2 = new S3Client({
     accessKeyId: env.R2_ACCESS_KEY_ID,
     secretAccessKey: env.R2_SECRET_ACCESS_KEY,
   },
-})
+});
 
-export const bucketName = env.R2_BUCKET_NAME
-export const publicUrl = env.R2_PUBLIC_URL
+export const bucketName = env.R2_BUCKET_NAME;
+export const publicUrl = env.R2_PUBLIC_URL;
 ```
 
 ## Basic Operations
@@ -73,8 +74,8 @@ export const publicUrl = env.R2_PUBLIC_URL
 ### Upload File
 
 ```typescript
-import { PutObjectCommand } from "@aws-sdk/client-s3"
-import { r2, bucketName } from "@/lib/storage/r2"
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { r2, bucketName } from "@/lib/storage/r2";
 
 export async function uploadFile(
   key: string,
@@ -88,17 +89,17 @@ export async function uploadFile(
       Body: body,
       ContentType: contentType,
     })
-  )
-  
-  return `${publicUrl}/${key}`
+  );
+
+  return `${publicUrl}/${key}`;
 }
 ```
 
 ### Download File
 
 ```typescript
-import { GetObjectCommand } from "@aws-sdk/client-s3"
-import { r2, bucketName } from "@/lib/storage/r2"
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { r2, bucketName } from "@/lib/storage/r2";
 
 export async function downloadFile(key: string) {
   const response = await r2.send(
@@ -106,17 +107,17 @@ export async function downloadFile(key: string) {
       Bucket: bucketName,
       Key: key,
     })
-  )
-  
-  return response.Body?.transformToByteArray()
+  );
+
+  return response.Body?.transformToByteArray();
 }
 ```
 
 ### Delete File
 
 ```typescript
-import { DeleteObjectCommand } from "@aws-sdk/client-s3"
-import { r2, bucketName } from "@/lib/storage/r2"
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { r2, bucketName } from "@/lib/storage/r2";
 
 export async function deleteFile(key: string) {
   await r2.send(
@@ -124,15 +125,15 @@ export async function deleteFile(key: string) {
       Bucket: bucketName,
       Key: key,
     })
-  )
+  );
 }
 ```
 
 ### List Files
 
 ```typescript
-import { ListObjectsV2Command } from "@aws-sdk/client-s3"
-import { r2, bucketName } from "@/lib/storage/r2"
+import { ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { r2, bucketName } from "@/lib/storage/r2";
 
 export async function listFiles(prefix?: string) {
   const response = await r2.send(
@@ -140,13 +141,15 @@ export async function listFiles(prefix?: string) {
       Bucket: bucketName,
       Prefix: prefix,
     })
-  )
-  
-  return response.Contents?.map((obj) => ({
-    key: obj.Key,
-    size: obj.Size,
-    lastModified: obj.LastModified,
-  })) ?? []
+  );
+
+  return (
+    response.Contents?.map((obj) => ({
+      key: obj.Key,
+      size: obj.Size,
+      lastModified: obj.LastModified,
+    })) ?? []
+  );
 }
 ```
 
@@ -157,22 +160,22 @@ export async function listFiles(prefix?: string) {
 Allow clients to upload directly to R2:
 
 ```typescript
-import { PutObjectCommand } from "@aws-sdk/client-s3"
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
-import { r2, bucketName } from "@/lib/storage/r2"
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { r2, bucketName } from "@/lib/storage/r2";
 
 export async function getUploadUrl(key: string, contentType: string) {
   const command = new PutObjectCommand({
     Bucket: bucketName,
     Key: key,
     ContentType: contentType,
-  })
-  
+  });
+
   const url = await getSignedUrl(r2, command, {
     expiresIn: 3600, // 1 hour
-  })
-  
-  return url
+  });
+
+  return url;
 }
 ```
 
@@ -181,21 +184,21 @@ export async function getUploadUrl(key: string, contentType: string) {
 For private files:
 
 ```typescript
-import { GetObjectCommand } from "@aws-sdk/client-s3"
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
-import { r2, bucketName } from "@/lib/storage/r2"
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { r2, bucketName } from "@/lib/storage/r2";
 
 export async function getDownloadUrl(key: string) {
   const command = new GetObjectCommand({
     Bucket: bucketName,
     Key: key,
-  })
-  
+  });
+
   const url = await getSignedUrl(r2, command, {
     expiresIn: 3600, // 1 hour
-  })
-  
-  return url
+  });
+
+  return url;
 }
 ```
 
@@ -205,32 +208,32 @@ export async function getDownloadUrl(key: string) {
 
 ```typescript
 // app/api/upload/route.ts
-import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth/server"
-import { getUploadUrl } from "@/lib/storage/r2"
-import { headers } from "next/headers"
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth/server";
+import { getUploadUrl, publicUrl } from "@/lib/storage/r2";
+import { headers } from "next/headers";
 
 export async function POST(req: Request) {
   const session = await auth.api.getSession({
     headers: await headers(),
-  })
-  
+  });
+
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  
-  const { filename, contentType } = await req.json()
-  
+
+  const { filename, contentType } = await req.json();
+
   // Generate unique key
-  const key = `uploads/${session.user.id}/${Date.now()}-${filename}`
-  
-  const uploadUrl = await getUploadUrl(key, contentType)
-  
+  const key = `uploads/${session.user.id}/${Date.now()}-${filename}`;
+
+  const uploadUrl = await getUploadUrl(key, contentType);
+
   return NextResponse.json({
     uploadUrl,
     key,
     publicUrl: `${publicUrl}/${key}`,
-  })
+  });
 }
 ```
 
@@ -238,34 +241,34 @@ export async function POST(req: Request) {
 
 ```typescript
 // app/api/files/route.ts
-import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth/server"
-import { uploadFile } from "@/lib/storage/r2"
-import { headers } from "next/headers"
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth/server";
+import { uploadFile } from "@/lib/storage/r2";
+import { headers } from "next/headers";
 
 export async function POST(req: Request) {
   const session = await auth.api.getSession({
     headers: await headers(),
-  })
-  
+  });
+
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  
-  const formData = await req.formData()
-  const file = formData.get("file") as File
-  
+
+  const formData = await req.formData();
+  const file = formData.get("file") as File;
+
   if (!file) {
-    return NextResponse.json({ error: "No file provided" }, { status: 400 })
+    return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
-  
-  const bytes = await file.arrayBuffer()
-  const buffer = Buffer.from(bytes)
-  
-  const key = `uploads/${session.user.id}/${Date.now()}-${file.name}`
-  const url = await uploadFile(key, buffer, file.type)
-  
-  return NextResponse.json({ url, key })
+
+  const bytes = await file.arrayBuffer();
+  const buffer = Buffer.from(bytes);
+
+  const key = `uploads/${session.user.id}/${Date.now()}-${file.name}`;
+  const url = await uploadFile(key, buffer, file.type);
+
+  return NextResponse.json({ url, key });
 }
 ```
 
@@ -274,16 +277,16 @@ export async function POST(req: Request) {
 ### Using Pre-signed URLs
 
 ```tsx
-"use client"
+"use client";
 
-import { useState } from "react"
+import { useState } from "react";
 
 export function FileUploader() {
-  const [uploading, setUploading] = useState(false)
-  
+  const [uploading, setUploading] = useState(false);
+
   const handleUpload = async (file: File) => {
-    setUploading(true)
-    
+    setUploading(true);
+
     try {
       // Get pre-signed URL
       const response = await fetch("/api/upload", {
@@ -293,10 +296,10 @@ export function FileUploader() {
           filename: file.name,
           contentType: file.type,
         }),
-      })
-      
-      const { uploadUrl, publicUrl } = await response.json()
-      
+      });
+
+      const { uploadUrl, publicUrl } = await response.json();
+
       // Upload directly to R2
       await fetch(uploadUrl, {
         method: "PUT",
@@ -304,70 +307,70 @@ export function FileUploader() {
         headers: {
           "Content-Type": file.type,
         },
-      })
-      
-      console.log("File uploaded:", publicUrl)
-      return publicUrl
+      });
+
+      console.log("File uploaded:", publicUrl);
+      return publicUrl;
     } finally {
-      setUploading(false)
+      setUploading(false);
     }
-  }
-  
+  };
+
   return (
     <input
       type="file"
       onChange={(e) => {
-        const file = e.target.files?.[0]
-        if (file) handleUpload(file)
+        const file = e.target.files?.[0];
+        if (file) handleUpload(file);
       }}
       disabled={uploading}
     />
-  )
+  );
 }
 ```
 
 ### With Progress Tracking
 
 ```tsx
-"use client"
+"use client";
 
-import { useState } from "react"
+import { useState } from "react";
 
 export function FileUploaderWithProgress() {
-  const [progress, setProgress] = useState(0)
-  
+  const [progress, setProgress] = useState(0);
+
   const handleUpload = async (file: File) => {
-    const { uploadUrl } = await getUploadUrl(file)
-    
+    const { uploadUrl } = await getUploadUrl(file);
+
     return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-      
+      const xhr = new XMLHttpRequest();
+
       xhr.upload.addEventListener("progress", (e) => {
         if (e.lengthComputable) {
-          setProgress(Math.round((e.loaded / e.total) * 100))
+          setProgress(Math.round((e.loaded / e.total) * 100));
         }
-      })
-      
+      });
+
       xhr.addEventListener("load", () => {
         if (xhr.status === 200) {
-          resolve(xhr.response)
+          resolve(xhr.response);
         } else {
-          reject(new Error("Upload failed"))
+          reject(new Error("Upload failed"));
         }
-      })
-      
-      xhr.open("PUT", uploadUrl)
-      xhr.setRequestHeader("Content-Type", file.type)
-      xhr.send(file)
-    })
-  }
-  
+      });
+
+      xhr.open("PUT", uploadUrl);
+      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.send(file);
+    });
+  };
+
   return (
     <div>
       <input type="file" onChange={(e) => handleUpload(e.target.files?.[0]!)} />
       {progress > 0 && <progress value={progress} max="100" />}
     </div>
-  )
+  );
 }
 ```
 
@@ -376,43 +379,35 @@ export function FileUploaderWithProgress() {
 ### Resize Images Before Upload
 
 ```typescript
-export async function resizeImage(
-  file: File,
-  maxWidth: number,
-  maxHeight: number
-): Promise<Blob> {
+export async function resizeImage(file: File, maxWidth: number, maxHeight: number): Promise<Blob> {
   return new Promise((resolve) => {
-    const img = new Image()
-    const canvas = document.createElement("canvas")
-    const ctx = canvas.getContext("2d")!
-    
+    const img = new Image();
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d")!;
+
     img.onload = () => {
-      let { width, height } = img
-      
+      let { width, height } = img;
+
       if (width > maxWidth) {
-        height = (height * maxWidth) / width
-        width = maxWidth
+        height = (height * maxWidth) / width;
+        width = maxWidth;
       }
-      
+
       if (height > maxHeight) {
-        width = (width * maxHeight) / height
-        height = maxHeight
+        width = (width * maxHeight) / height;
+        height = maxHeight;
       }
-      
-      canvas.width = width
-      canvas.height = height
-      
-      ctx.drawImage(img, 0, 0, width, height)
-      
-      canvas.toBlob(
-        (blob) => resolve(blob!),
-        file.type,
-        0.9
-      )
-    }
-    
-    img.src = URL.createObjectURL(file)
-  })
+
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob((blob) => resolve(blob!), file.type, 0.9);
+    };
+
+    img.src = URL.createObjectURL(file);
+  });
 }
 ```
 
@@ -422,37 +417,35 @@ Track and enforce storage limits:
 
 ```typescript
 // lib/storage/quota.ts
-import { db } from "@/lib/db/client"
-import { files, users } from "@/lib/db/schema"
-import { eq, sum } from "drizzle-orm"
-import { plans } from "@/lib/payments/plans"
+import { db } from "@/lib/db/client";
+import { files, users } from "@/lib/db/schema";
+import { eq, sum } from "drizzle-orm";
+import { plans } from "@/lib/payments/plans";
 
 export async function getUserStorageUsage(userId: string) {
   const [result] = await db
     .select({ total: sum(files.size) })
     .from(files)
-    .where(eq(files.userId, userId))
-    
-  return Number(result?.total ?? 0)
+    .where(eq(files.userId, userId));
+
+  return Number(result?.total ?? 0);
 }
 
 export async function canUpload(userId: string, fileSize: number) {
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
-  })
-  
-  const plan = plans[user?.plan ?? "free"]
-  const usage = await getUserStorageUsage(userId)
-  
-  return usage + fileSize <= plan.limits.storage
+  });
+
+  const plan = plans[user?.plan ?? "free"];
+  const usage = await getUserStorageUsage(userId);
+
+  return usage + fileSize <= plan.limits.storage;
 }
 ```
 
 ## Best Practices
 
-<Callout type="info">
-  **Tips for production storage:**
-</Callout>
+<Callout type="info">**Tips for production storage:**</Callout>
 
 1. **Validate file types** - Check MIME types before upload
 2. **Limit file sizes** - Enforce maximum file sizes

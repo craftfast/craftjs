@@ -1,6 +1,6 @@
 # Webhook Handling
 
-import { Steps, Callout, Tabs } from 'nextra/components'
+import { Steps, Callout, Tabs } from "nextra/components";
 
 This guide covers best practices for handling webhooks from payment providers, email services, and other third-party integrations.
 
@@ -20,35 +20,32 @@ Always verify webhook signatures to ensure requests are legitimate:
 
 ```typescript
 // app/api/webhooks/dodo/route.ts
-import { NextResponse } from "next/server"
-import { headers } from "next/headers"
-import crypto from "crypto"
-import { env } from "@/env"
+import { NextResponse } from "next/server";
+import { headers } from "next/headers";
+import crypto from "crypto";
+import { env } from "@/env";
 
 export async function POST(req: Request) {
-  const body = await req.text()
-  const headersList = await headers()
-  const signature = headersList.get("dodo-signature")
-  
+  const body = await req.text();
+  const headersList = await headers();
+  const signature = headersList.get("dodo-signature");
+
   // Verify signature
   const expectedSignature = crypto
     .createHmac("sha256", env.DODO_WEBHOOK_SECRET)
     .update(body)
-    .digest("hex")
-  
+    .digest("hex");
+
   if (signature !== expectedSignature) {
-    console.error("Invalid webhook signature")
-    return NextResponse.json(
-      { error: "Invalid signature" },
-      { status: 401 }
-    )
+    console.error("Invalid webhook signature");
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
-  
+
   // Process webhook
-  const event = JSON.parse(body)
+  const event = JSON.parse(body);
   // ...
-  
-  return NextResponse.json({ received: true })
+
+  return NextResponse.json({ received: true });
 }
 ```
 
@@ -58,20 +55,20 @@ For additional security, verify the request comes from the expected IP:
 
 ```typescript
 export async function POST(req: Request) {
-  const headersList = await headers()
-  const forwardedFor = headersList.get("x-forwarded-for")
-  const ip = forwardedFor?.split(",")[0] || "unknown"
-  
+  const headersList = await headers();
+  const forwardedFor = headersList.get("x-forwarded-for");
+  const ip = forwardedFor?.split(",")[0] || "unknown";
+
   const allowedIPs = [
     "54.187.174.169",
     "54.187.205.235",
     // Add provider's IPs
-  ]
-  
+  ];
+
   if (!allowedIPs.includes(ip)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  
+
   // Process webhook
 }
 ```
@@ -82,59 +79,56 @@ export async function POST(req: Request) {
 
 ```typescript
 // app/api/webhooks/dodo/route.ts
-import { NextResponse } from "next/server"
-import { db } from "@/lib/db/client"
-import { users, subscriptions, payments } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { users, subscriptions, payments } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function POST(req: Request) {
   // ... signature verification
-  
-  const event = JSON.parse(body)
-  
+
+  const event = JSON.parse(body);
+
   try {
     switch (event.type) {
       case "payment.succeeded":
-        await handlePaymentSucceeded(event.data)
-        break
-        
+        await handlePaymentSucceeded(event.data);
+        break;
+
       case "payment.failed":
-        await handlePaymentFailed(event.data)
-        break
-        
+        await handlePaymentFailed(event.data);
+        break;
+
       case "subscription.created":
-        await handleSubscriptionCreated(event.data)
-        break
-        
+        await handleSubscriptionCreated(event.data);
+        break;
+
       case "subscription.updated":
-        await handleSubscriptionUpdated(event.data)
-        break
-        
+        await handleSubscriptionUpdated(event.data);
+        break;
+
       case "subscription.canceled":
-        await handleSubscriptionCanceled(event.data)
-        break
-        
+        await handleSubscriptionCanceled(event.data);
+        break;
+
       case "subscription.past_due":
-        await handleSubscriptionPastDue(event.data)
-        break
-        
+        await handleSubscriptionPastDue(event.data);
+        break;
+
       default:
-        console.log(`Unhandled event type: ${event.type}`)
+        console.log(`Unhandled event type: ${event.type}`);
     }
-    
-    return NextResponse.json({ received: true })
+
+    return NextResponse.json({ received: true });
   } catch (error) {
-    console.error("Webhook error:", error)
-    return NextResponse.json(
-      { error: "Webhook handler failed" },
-      { status: 500 }
-    )
+    console.error("Webhook error:", error);
+    return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
 }
 
 async function handlePaymentSucceeded(data: any) {
-  const { userId, amount, currency, paymentId } = data
-  
+  const { userId, amount, currency, paymentId } = data;
+
   // Record payment
   await db.insert(payments).values({
     id: paymentId,
@@ -143,25 +137,25 @@ async function handlePaymentSucceeded(data: any) {
     currency,
     status: "succeeded",
     createdAt: new Date(),
-  })
-  
+  });
+
   // Send confirmation email
-  await sendPaymentConfirmationEmail(userId, amount)
+  await sendPaymentConfirmationEmail(userId, amount);
 }
 
 async function handlePaymentFailed(data: any) {
-  const { userId, reason } = data
-  
+  const { userId, reason } = data;
+
   // Notify user
-  await sendPaymentFailedEmail(userId, reason)
-  
+  await sendPaymentFailedEmail(userId, reason);
+
   // Log for support
-  console.error(`Payment failed for user ${userId}: ${reason}`)
+  console.error(`Payment failed for user ${userId}: ${reason}`);
 }
 
 async function handleSubscriptionCreated(data: any) {
-  const { userId, plan, subscriptionId, currentPeriodEnd } = data
-  
+  const { userId, plan, subscriptionId, currentPeriodEnd } = data;
+
   // Create subscription record
   await db.insert(subscriptions).values({
     id: subscriptionId,
@@ -169,18 +163,15 @@ async function handleSubscriptionCreated(data: any) {
     plan,
     status: "active",
     currentPeriodEnd: new Date(currentPeriodEnd),
-  })
-  
+  });
+
   // Update user plan
-  await db
-    .update(users)
-    .set({ plan })
-    .where(eq(users.id, userId))
+  await db.update(users).set({ plan }).where(eq(users.id, userId));
 }
 
 async function handleSubscriptionUpdated(data: any) {
-  const { subscriptionId, plan, currentPeriodEnd, cancelAtPeriodEnd } = data
-  
+  const { subscriptionId, plan, currentPeriodEnd, cancelAtPeriodEnd } = data;
+
   await db
     .update(subscriptions)
     .set({
@@ -189,39 +180,36 @@ async function handleSubscriptionUpdated(data: any) {
       cancelAtPeriodEnd,
       updatedAt: new Date(),
     })
-    .where(eq(subscriptions.id, subscriptionId))
+    .where(eq(subscriptions.id, subscriptionId));
 }
 
 async function handleSubscriptionCanceled(data: any) {
-  const { userId, subscriptionId } = data
-  
+  const { userId, subscriptionId } = data;
+
   // Update subscription status
   await db
     .update(subscriptions)
     .set({ status: "canceled", updatedAt: new Date() })
-    .where(eq(subscriptions.id, subscriptionId))
-  
+    .where(eq(subscriptions.id, subscriptionId));
+
   // Downgrade user to free
-  await db
-    .update(users)
-    .set({ plan: "free" })
-    .where(eq(users.id, userId))
-  
+  await db.update(users).set({ plan: "free" }).where(eq(users.id, userId));
+
   // Send cancellation email
-  await sendSubscriptionCanceledEmail(userId)
+  await sendSubscriptionCanceledEmail(userId);
 }
 
 async function handleSubscriptionPastDue(data: any) {
-  const { userId, subscriptionId } = data
-  
+  const { userId, subscriptionId } = data;
+
   // Update status
   await db
     .update(subscriptions)
     .set({ status: "past_due", updatedAt: new Date() })
-    .where(eq(subscriptions.id, subscriptionId))
-  
+    .where(eq(subscriptions.id, subscriptionId));
+
   // Send reminder email
-  await sendPaymentReminderEmail(userId)
+  await sendPaymentReminderEmail(userId);
 }
 ```
 
@@ -231,62 +219,59 @@ async function handleSubscriptionPastDue(data: any) {
 
 ```typescript
 // app/api/webhooks/resend/route.ts
-import { NextResponse } from "next/server"
-import { db } from "@/lib/db/client"
-import { emailLogs } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { emailLogs } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function POST(req: Request) {
-  const event = await req.json()
-  
+  const event = await req.json();
+
   switch (event.type) {
     case "email.delivered":
       await db
         .update(emailLogs)
         .set({ status: "delivered", deliveredAt: new Date() })
-        .where(eq(emailLogs.id, event.data.email_id))
-      break
-      
+        .where(eq(emailLogs.id, event.data.email_id));
+      break;
+
     case "email.bounced":
-      await handleBounce(event.data)
-      break
-      
+      await handleBounce(event.data);
+      break;
+
     case "email.complained":
-      await handleComplaint(event.data)
-      break
-      
+      await handleComplaint(event.data);
+      break;
+
     case "email.opened":
       await db
         .update(emailLogs)
         .set({ openedAt: new Date() })
-        .where(eq(emailLogs.id, event.data.email_id))
-      break
+        .where(eq(emailLogs.id, event.data.email_id));
+      break;
   }
-  
-  return NextResponse.json({ received: true })
+
+  return NextResponse.json({ received: true });
 }
 
 async function handleBounce(data: any) {
-  const { email, bounce_type } = data
-  
+  const { email, bounce_type } = data;
+
   // Mark email as invalid
   await db
     .update(users)
     .set({ emailValid: false, emailBounceType: bounce_type })
-    .where(eq(users.email, email))
-  
+    .where(eq(users.email, email));
+
   // Log bounce
-  console.warn(`Email bounced: ${email} (${bounce_type})`)
+  console.warn(`Email bounced: ${email} (${bounce_type})`);
 }
 
 async function handleComplaint(data: any) {
-  const { email } = data
-  
+  const { email } = data;
+
   // Unsubscribe user from marketing emails
-  await db
-    .update(users)
-    .set({ marketingOptOut: true })
-    .where(eq(users.email, email))
+  await db.update(users).set({ marketingOptOut: true }).where(eq(users.email, email));
 }
 ```
 
@@ -296,25 +281,25 @@ Ensure webhooks can be safely retried:
 
 ```typescript
 // app/api/webhooks/dodo/route.ts
-import { redis } from "@/lib/cache/redis"
+import { redis } from "@/lib/cache/redis";
 
 export async function POST(req: Request) {
-  const event = JSON.parse(body)
-  
+  const event = JSON.parse(body);
+
   // Check if already processed
-  const processed = await redis.get(`webhook:${event.id}`)
+  const processed = await redis.get(`webhook:${event.id}`);
   if (processed) {
-    console.log(`Webhook ${event.id} already processed`)
-    return NextResponse.json({ received: true })
+    console.log(`Webhook ${event.id} already processed`);
+    return NextResponse.json({ received: true });
   }
-  
+
   // Process webhook
-  await processWebhook(event)
-  
+  await processWebhook(event);
+
   // Mark as processed (expire after 24 hours)
-  await redis.set(`webhook:${event.id}`, "1", { ex: 86400 })
-  
-  return NextResponse.json({ received: true })
+  await redis.set(`webhook:${event.id}`, "1", { ex: 86400 });
+
+  return NextResponse.json({ received: true });
 }
 ```
 
@@ -324,28 +309,28 @@ For complex webhooks, process asynchronously:
 
 ```typescript
 // app/api/webhooks/dodo/route.ts
-import { processWebhookTask } from "@/trigger/tasks"
+import { processWebhookTask } from "@/trigger/tasks";
 
 export async function POST(req: Request) {
   // ... signature verification
-  
-  const event = JSON.parse(body)
-  
+
+  const event = JSON.parse(body);
+
   // Acknowledge immediately
   // Process in background
   await processWebhookTask.trigger({
     type: event.type,
     data: event.data,
     eventId: event.id,
-  })
-  
-  return NextResponse.json({ received: true })
+  });
+
+  return NextResponse.json({ received: true });
 }
 ```
 
 ```typescript
 // trigger/tasks.ts
-import { task } from "@trigger.dev/sdk/v3"
+import { task } from "@trigger.dev/sdk/v3";
 
 export const processWebhookTask = task({
   id: "process-webhook",
@@ -355,26 +340,26 @@ export const processWebhookTask = task({
     minTimeoutInMs: 1000,
   },
   run: async (payload) => {
-    const { type, data, eventId } = payload
-    
+    const { type, data, eventId } = payload;
+
     // Check idempotency
-    const processed = await redis.get(`webhook:${eventId}`)
-    if (processed) return { skipped: true }
-    
+    const processed = await redis.get(`webhook:${eventId}`);
+    if (processed) return { skipped: true };
+
     // Process based on type
     switch (type) {
       case "payment.succeeded":
-        await handlePaymentSucceeded(data)
-        break
+        await handlePaymentSucceeded(data);
+        break;
       // ... other handlers
     }
-    
+
     // Mark as processed
-    await redis.set(`webhook:${eventId}`, "1", { ex: 86400 })
-    
-    return { success: true }
+    await redis.set(`webhook:${eventId}`, "1", { ex: 86400 });
+
+    return { success: true };
   },
-})
+});
 ```
 
 ## Testing Webhooks
@@ -397,32 +382,29 @@ Create a test endpoint to simulate webhooks:
 
 ```typescript
 // app/api/webhooks/test/route.ts (only in development)
-import { NextResponse } from "next/server"
+import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   if (process.env.NODE_ENV !== "development") {
-    return NextResponse.json({ error: "Not found" }, { status: 404 })
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  
-  const { type, data } = await req.json()
-  
+
+  const { type, data } = await req.json();
+
   // Forward to actual webhook handler
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/dodo`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "dodo-signature": generateTestSignature({ type, data }),
-      },
-      body: JSON.stringify({ type, data, id: `test-${Date.now()}` }),
-    }
-  )
-  
+  const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/dodo`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "dodo-signature": generateTestSignature({ type, data }),
+    },
+    body: JSON.stringify({ type, data, id: `test-${Date.now()}` }),
+  });
+
   return NextResponse.json({
     status: response.status,
     body: await response.json(),
-  })
+  });
 }
 ```
 
@@ -432,27 +414,31 @@ export async function POST(req: Request) {
 
 ```typescript
 // lib/webhooks/logger.ts
+import { posthog } from "@/lib/analytics/client";
+
 export function logWebhook(
   provider: string,
   event: string,
   status: "success" | "error",
   details?: any
 ) {
-  console.log(JSON.stringify({
-    timestamp: new Date().toISOString(),
-    type: "webhook",
-    provider,
-    event,
-    status,
-    ...details,
-  }))
-  
+  console.log(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      type: "webhook",
+      provider,
+      event,
+      status,
+      ...details,
+    })
+  );
+
   // Also send to analytics
   posthog.capture("webhook_received", {
     provider,
     event,
     status,
-  })
+  });
 }
 ```
 
@@ -460,29 +446,23 @@ export function logWebhook(
 
 ```typescript
 // lib/webhooks/alert.ts
-export async function alertWebhookError(
-  provider: string,
-  event: string,
-  error: Error
-) {
+export async function alertWebhookError(provider: string, event: string, error: Error) {
   // Send to error tracking
-  console.error(`Webhook error: ${provider}/${event}`, error)
-  
+  console.error(`Webhook error: ${provider}/${event}`, error);
+
   // Send Slack/Discord notification
   await fetch(process.env.SLACK_WEBHOOK_URL!, {
     method: "POST",
     body: JSON.stringify({
       text: `⚠️ Webhook Error\nProvider: ${provider}\nEvent: ${event}\nError: ${error.message}`,
     }),
-  })
+  });
 }
 ```
 
 ## Best Practices
 
-<Callout type="info">
-  **Webhook handling best practices:**
-</Callout>
+<Callout type="info">**Webhook handling best practices:**</Callout>
 
 1. **Always verify signatures** - Never trust unverified requests
 2. **Respond quickly** - Return 200 within 5 seconds

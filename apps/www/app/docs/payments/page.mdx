@@ -438,6 +438,10 @@ export function PricingPage() {
 Track usage and bill accordingly:
 
 ```typescript
+import { sum, and, eq, gte } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { aiUsage } from "@/lib/db/schema";
+
 // Track AI usage
 export async function trackAIUsage(userId: string, tokens: number) {
   await db.insert(aiUsage).values({
