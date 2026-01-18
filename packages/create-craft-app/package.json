@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Create a new Craft.js application with the best practices baked in",
   "license": "MIT",
-  "author": "Your Name",
+  "author": "Craft Team <support@craft.fast>",
   "repository": {
     "type": "git",
     "url": "https://github.com/craftfast/craftjs.git",
