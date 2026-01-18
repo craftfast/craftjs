@@ -11,11 +11,5 @@
     ["cn\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
   ],
   "css.customData": [".vscode/tailwind.css.json"],
-  "css.validate": true,
-  "files.exclude": {
-    "packages/create-craft-app/template": true
-  },
-  "search.exclude": {
-    "packages/create-craft-app/template": true
-  }
+  "css.validate": true
 }
