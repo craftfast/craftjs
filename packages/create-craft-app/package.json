@@ -1,6 +1,6 @@
 {
   "name": "create-craft-app",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Create a new Craft.js application with the best practices baked in",
   "license": "MIT",
   "author": "Craft Team <support@craft.fast>",
