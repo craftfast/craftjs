@@ -1,4 +1,4 @@
-# CraftJS - Next.js AI App Boilerplate
+# CraftJS
 
 <div align="center">
 
@@ -7,13 +7,40 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?style=for-the-badge&logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38B2AC?style=for-the-badge&logo=tailwind-css)
 
-**An opinionated Next.js boilerplate to craft AI apps faster** 🚀
+**The best way to build a full-stack SaaS application** 🚀
 
-[Getting Started](#getting-started) • [Features](#features) • [Tech Stack](#tech-stack) • [Project Structure](#project-structure) • [Deployment](#deployment)
+[Documentation](https://craftjs.dev) • [Quick Start](#quick-start) • [Contributing](CONTRIBUTING.md)
 
 </div>
 
 ---
+
+## Quick Start
+
+```bash
+npx create-craft-app@latest my-app
+cd my-app
+cp .env.example .env
+pnpm dev
+```
+
+## What's Inside?
+
+This monorepo includes the following:
+
+### Apps
+
+- `apps/www` - Documentation site built with [Nextra](https://nextra.site)
+
+### Packages
+
+- `packages/create-craft-app` - CLI tool for scaffolding new projects
+
+### Tooling
+
+- `tooling/typescript` - Shared TypeScript configurations
+- `tooling/eslint` - Shared ESLint configurations
+- `tooling/prettier` - Shared Prettier configuration
 
 ## ✨ Features
 

@@ -1,0 +1,416 @@
+# Database
+
+import { Tabs, Callout, Steps } from 'nextra/components'
+
+CraftJS uses [Drizzle ORM](https://orm.drizzle.team/) with [Neon PostgreSQL](https://neon.tech/) for type-safe database operations.
+
+## Features
+
+- ✅ **Type-Safe Queries** - Full TypeScript support
+- ✅ **Serverless PostgreSQL** - Neon's autoscaling database
+- ✅ **Visual Browser** - Drizzle Studio for data exploration
+- ✅ **Migrations** - Version-controlled schema changes
+- ✅ **Edge Compatible** - Works in serverless environments
+
+## Setup
+
+### Environment Variable
+
+```env
+DATABASE_URL="postgresql://username:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require"
+```
+
+### Database Client
+
+The client is configured in `src/lib/db/client.ts`:
+
+```typescript
+import { drizzle } from "drizzle-orm/neon-http"
+import { neon } from "@neondatabase/serverless"
+import { env } from "@/env"
+import * as schema from "./schema"
+
+const sql = neon(env.DATABASE_URL)
+
+export const db = drizzle(sql, { schema })
+```
+
+## Schema Definition
+
+Define your schema in `src/lib/db/schema.ts`:
+
+```typescript
+import {
+  pgTable,
+  text,
+  timestamp,
+  integer,
+  boolean,
+  pgEnum,
+} from "drizzle-orm/pg-core"
+
+// Enums
+export const planEnum = pgEnum("plan", ["free", "pro", "enterprise"])
+
+// Users table
+export const users = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name"),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").default(false),
+  image: text("image"),
+  plan: planEnum("plan").default("free"),
+  aiCredits: integer("ai_credits").default(100),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})
+
+// Sessions table (managed by Better Auth)
+export const sessions = pgTable("session", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at").notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})
+
+// AI Usage tracking
+export const aiUsage = pgTable("ai_usage", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  model: text("model").notNull(),
+  promptTokens: integer("prompt_tokens").notNull(),
+  completionTokens: integer("completion_tokens").notNull(),
+  totalTokens: integer("total_tokens").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+})
+
+// Subscriptions
+export const subscriptions = pgTable("subscription", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  plan: planEnum("plan").notNull(),
+  status: text("status").notNull(), // active, canceled, past_due
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})
+
+// Type exports
+export type User = typeof users.$inferSelect
+export type NewUser = typeof users.$inferInsert
+export type Subscription = typeof subscriptions.$inferSelect
+```
+
+## CRUD Operations
+
+### Create (Insert)
+
+```typescript
+import { db } from "@/lib/db/client"
+import { users } from "@/lib/db/schema"
+
+// Single insert
+const newUser = await db.insert(users).values({
+  id: crypto.randomUUID(),
+  name: "John Doe",
+  email: "john@example.com",
+}).returning()
+
+// Bulk insert
+await db.insert(users).values([
+  { id: "1", name: "User 1", email: "user1@example.com" },
+  { id: "2", name: "User 2", email: "user2@example.com" },
+])
+```
+
+### Read (Select)
+
+<Tabs items={['Basic', 'With Conditions', 'With Joins']}>
+  <Tabs.Tab>
+    ```typescript
+    import { db } from "@/lib/db/client"
+    import { users } from "@/lib/db/schema"
+    
+    // Get all users
+    const allUsers = await db.select().from(users)
+    
+    // Get specific columns
+    const userNames = await db
+      .select({ name: users.name, email: users.email })
+      .from(users)
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import { eq, and, gte, like } from "drizzle-orm"
+    
+    // Find by ID
+    const user = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, "user-id"))
+      .limit(1)
+    
+    // Multiple conditions
+    const proUsers = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.plan, "pro"),
+          gte(users.aiCredits, 100)
+        )
+      )
+    
+    // Pattern matching
+    const gmailUsers = await db
+      .select()
+      .from(users)
+      .where(like(users.email, "%@gmail.com"))
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import { eq } from "drizzle-orm"
+    
+    // Inner join
+    const usersWithSubscriptions = await db
+      .select({
+        user: users,
+        subscription: subscriptions,
+      })
+      .from(users)
+      .innerJoin(subscriptions, eq(users.id, subscriptions.userId))
+    
+    // Left join
+    const usersWithOptionalSub = await db
+      .select()
+      .from(users)
+      .leftJoin(subscriptions, eq(users.id, subscriptions.userId))
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Update
+
+```typescript
+import { db } from "@/lib/db/client"
+import { users } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
+
+// Update user
+await db
+  .update(users)
+  .set({
+    plan: "pro",
+    aiCredits: 10000,
+    updatedAt: new Date(),
+  })
+  .where(eq(users.id, "user-id"))
+
+// Update with returning
+const [updatedUser] = await db
+  .update(users)
+  .set({ name: "New Name" })
+  .where(eq(users.id, "user-id"))
+  .returning()
+```
+
+### Delete
+
+```typescript
+import { db } from "@/lib/db/client"
+import { users, aiUsage } from "@/lib/db/schema"
+import { eq, lt } from "drizzle-orm"
+
+// Delete user
+await db.delete(users).where(eq(users.id, "user-id"))
+
+// Delete old records
+await db
+  .delete(aiUsage)
+  .where(lt(aiUsage.createdAt, new Date("2024-01-01")))
+```
+
+## Migrations
+
+### Development: Push Schema
+
+For development, use `db:push` to sync schema directly:
+
+```bash
+pnpm db:push
+```
+
+<Callout type="warning">
+  `db:push` is great for development but can cause data loss. Use migrations in production.
+</Callout>
+
+### Production: Migrations
+
+<Steps>
+### Generate Migration
+
+```bash
+pnpm db:generate
+```
+
+This creates a SQL migration file in `/drizzle`.
+
+### Review Migration
+
+Check the generated SQL in `/drizzle/XXXX_migration_name.sql`.
+
+### Apply Migration
+
+```bash
+pnpm db:migrate
+```
+</Steps>
+
+## Drizzle Studio
+
+Explore your data visually:
+
+```bash
+pnpm db:studio
+```
+
+Opens a web interface at `https://local.drizzle.studio` where you can:
+- Browse tables
+- View and edit data
+- Run custom queries
+- Export data
+
+## Common Patterns
+
+### Repository Pattern
+
+```typescript
+// lib/db/repositories/user.ts
+import { db } from "@/lib/db/client"
+import { users, type User, type NewUser } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
+
+export const userRepository = {
+  async findById(id: string): Promise<User | null> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1)
+    return user ?? null
+  },
+  
+  async findByEmail(email: string): Promise<User | null> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1)
+    return user ?? null
+  },
+  
+  async create(data: NewUser): Promise<User> {
+    const [user] = await db.insert(users).values(data).returning()
+    return user
+  },
+  
+  async update(id: string, data: Partial<NewUser>): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning()
+    return user
+  },
+  
+  async delete(id: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, id))
+  },
+}
+```
+
+### Transactions
+
+```typescript
+import { db } from "@/lib/db/client"
+import { users, subscriptions } from "@/lib/db/schema"
+
+await db.transaction(async (tx) => {
+  // Create user
+  const [user] = await tx
+    .insert(users)
+    .values({ id: "user-1", email: "user@example.com" })
+    .returning()
+  
+  // Create subscription
+  await tx.insert(subscriptions).values({
+    id: "sub-1",
+    userId: user.id,
+    plan: "pro",
+    status: "active",
+  })
+})
+```
+
+### Prepared Statements
+
+For frequently used queries:
+
+```typescript
+import { db } from "@/lib/db/client"
+import { users } from "@/lib/db/schema"
+import { eq, sql } from "drizzle-orm"
+
+const findUserByEmail = db
+  .select()
+  .from(users)
+  .where(eq(users.email, sql.placeholder("email")))
+  .prepare("find_user_by_email")
+
+// Usage
+const user = await findUserByEmail.execute({ email: "user@example.com" })
+```
+
+## Performance Tips
+
+1. **Use indexes** - Add indexes for frequently queried columns
+2. **Select specific columns** - Avoid `SELECT *` when possible
+3. **Use pagination** - Limit results with `.limit()` and `.offset()`
+4. **Batch operations** - Use bulk inserts/updates when possible
+5. **Connection pooling** - Neon handles this automatically
+
+### Adding Indexes
+
+```typescript
+import { pgTable, text, index } from "drizzle-orm/pg-core"
+
+export const users = pgTable(
+  "user",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull().unique(),
+    // ...
+  },
+  (table) => ({
+    emailIdx: index("email_idx").on(table.email),
+  })
+)
+```
+
+## Next Steps
+
+- [Authentication](/authentication) - User management
+- [Payments](/payments) - Subscription handling
+- [Background Jobs](/background-jobs) - Async database operations

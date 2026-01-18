@@ -1,0 +1,499 @@
+# Webhook Handling
+
+import { Steps, Callout, Tabs } from 'nextra/components'
+
+This guide covers best practices for handling webhooks from payment providers, email services, and other third-party integrations.
+
+## Webhook Basics
+
+Webhooks are HTTP callbacks that notify your application when events occur in external services. CraftJS handles webhooks for:
+
+- **Payments** - Subscription changes, successful payments, failures
+- **Email** - Bounces, complaints, deliveries
+- **Background Jobs** - Task completions, failures
+
+## Security
+
+### Signature Verification
+
+Always verify webhook signatures to ensure requests are legitimate:
+
+```typescript
+// app/api/webhooks/dodo/route.ts
+import { NextResponse } from "next/server"
+import { headers } from "next/headers"
+import crypto from "crypto"
+import { env } from "@/env"
+
+export async function POST(req: Request) {
+  const body = await req.text()
+  const headersList = await headers()
+  const signature = headersList.get("dodo-signature")
+  
+  // Verify signature
+  const expectedSignature = crypto
+    .createHmac("sha256", env.DODO_WEBHOOK_SECRET)
+    .update(body)
+    .digest("hex")
+  
+  if (signature !== expectedSignature) {
+    console.error("Invalid webhook signature")
+    return NextResponse.json(
+      { error: "Invalid signature" },
+      { status: 401 }
+    )
+  }
+  
+  // Process webhook
+  const event = JSON.parse(body)
+  // ...
+  
+  return NextResponse.json({ received: true })
+}
+```
+
+### IP Allowlisting
+
+For additional security, verify the request comes from the expected IP:
+
+```typescript
+export async function POST(req: Request) {
+  const headersList = await headers()
+  const forwardedFor = headersList.get("x-forwarded-for")
+  const ip = forwardedFor?.split(",")[0] || "unknown"
+  
+  const allowedIPs = [
+    "54.187.174.169",
+    "54.187.205.235",
+    // Add provider's IPs
+  ]
+  
+  if (!allowedIPs.includes(ip)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+  
+  // Process webhook
+}
+```
+
+## Payment Webhooks
+
+### Handling Payment Events
+
+```typescript
+// app/api/webhooks/dodo/route.ts
+import { NextResponse } from "next/server"
+import { db } from "@/lib/db/client"
+import { users, subscriptions, payments } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
+
+export async function POST(req: Request) {
+  // ... signature verification
+  
+  const event = JSON.parse(body)
+  
+  try {
+    switch (event.type) {
+      case "payment.succeeded":
+        await handlePaymentSucceeded(event.data)
+        break
+        
+      case "payment.failed":
+        await handlePaymentFailed(event.data)
+        break
+        
+      case "subscription.created":
+        await handleSubscriptionCreated(event.data)
+        break
+        
+      case "subscription.updated":
+        await handleSubscriptionUpdated(event.data)
+        break
+        
+      case "subscription.canceled":
+        await handleSubscriptionCanceled(event.data)
+        break
+        
+      case "subscription.past_due":
+        await handleSubscriptionPastDue(event.data)
+        break
+        
+      default:
+        console.log(`Unhandled event type: ${event.type}`)
+    }
+    
+    return NextResponse.json({ received: true })
+  } catch (error) {
+    console.error("Webhook error:", error)
+    return NextResponse.json(
+      { error: "Webhook handler failed" },
+      { status: 500 }
+    )
+  }
+}
+
+async function handlePaymentSucceeded(data: any) {
+  const { userId, amount, currency, paymentId } = data
+  
+  // Record payment
+  await db.insert(payments).values({
+    id: paymentId,
+    userId,
+    amount,
+    currency,
+    status: "succeeded",
+    createdAt: new Date(),
+  })
+  
+  // Send confirmation email
+  await sendPaymentConfirmationEmail(userId, amount)
+}
+
+async function handlePaymentFailed(data: any) {
+  const { userId, reason } = data
+  
+  // Notify user
+  await sendPaymentFailedEmail(userId, reason)
+  
+  // Log for support
+  console.error(`Payment failed for user ${userId}: ${reason}`)
+}
+
+async function handleSubscriptionCreated(data: any) {
+  const { userId, plan, subscriptionId, currentPeriodEnd } = data
+  
+  // Create subscription record
+  await db.insert(subscriptions).values({
+    id: subscriptionId,
+    userId,
+    plan,
+    status: "active",
+    currentPeriodEnd: new Date(currentPeriodEnd),
+  })
+  
+  // Update user plan
+  await db
+    .update(users)
+    .set({ plan })
+    .where(eq(users.id, userId))
+}
+
+async function handleSubscriptionUpdated(data: any) {
+  const { subscriptionId, plan, currentPeriodEnd, cancelAtPeriodEnd } = data
+  
+  await db
+    .update(subscriptions)
+    .set({
+      plan,
+      currentPeriodEnd: new Date(currentPeriodEnd),
+      cancelAtPeriodEnd,
+      updatedAt: new Date(),
+    })
+    .where(eq(subscriptions.id, subscriptionId))
+}
+
+async function handleSubscriptionCanceled(data: any) {
+  const { userId, subscriptionId } = data
+  
+  // Update subscription status
+  await db
+    .update(subscriptions)
+    .set({ status: "canceled", updatedAt: new Date() })
+    .where(eq(subscriptions.id, subscriptionId))
+  
+  // Downgrade user to free
+  await db
+    .update(users)
+    .set({ plan: "free" })
+    .where(eq(users.id, userId))
+  
+  // Send cancellation email
+  await sendSubscriptionCanceledEmail(userId)
+}
+
+async function handleSubscriptionPastDue(data: any) {
+  const { userId, subscriptionId } = data
+  
+  // Update status
+  await db
+    .update(subscriptions)
+    .set({ status: "past_due", updatedAt: new Date() })
+    .where(eq(subscriptions.id, subscriptionId))
+  
+  // Send reminder email
+  await sendPaymentReminderEmail(userId)
+}
+```
+
+## Email Webhooks
+
+### Handling Email Events
+
+```typescript
+// app/api/webhooks/resend/route.ts
+import { NextResponse } from "next/server"
+import { db } from "@/lib/db/client"
+import { emailLogs } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
+
+export async function POST(req: Request) {
+  const event = await req.json()
+  
+  switch (event.type) {
+    case "email.delivered":
+      await db
+        .update(emailLogs)
+        .set({ status: "delivered", deliveredAt: new Date() })
+        .where(eq(emailLogs.id, event.data.email_id))
+      break
+      
+    case "email.bounced":
+      await handleBounce(event.data)
+      break
+      
+    case "email.complained":
+      await handleComplaint(event.data)
+      break
+      
+    case "email.opened":
+      await db
+        .update(emailLogs)
+        .set({ openedAt: new Date() })
+        .where(eq(emailLogs.id, event.data.email_id))
+      break
+  }
+  
+  return NextResponse.json({ received: true })
+}
+
+async function handleBounce(data: any) {
+  const { email, bounce_type } = data
+  
+  // Mark email as invalid
+  await db
+    .update(users)
+    .set({ emailValid: false, emailBounceType: bounce_type })
+    .where(eq(users.email, email))
+  
+  // Log bounce
+  console.warn(`Email bounced: ${email} (${bounce_type})`)
+}
+
+async function handleComplaint(data: any) {
+  const { email } = data
+  
+  // Unsubscribe user from marketing emails
+  await db
+    .update(users)
+    .set({ marketingOptOut: true })
+    .where(eq(users.email, email))
+}
+```
+
+## Idempotency
+
+Ensure webhooks can be safely retried:
+
+```typescript
+// app/api/webhooks/dodo/route.ts
+import { redis } from "@/lib/cache/redis"
+
+export async function POST(req: Request) {
+  const event = JSON.parse(body)
+  
+  // Check if already processed
+  const processed = await redis.get(`webhook:${event.id}`)
+  if (processed) {
+    console.log(`Webhook ${event.id} already processed`)
+    return NextResponse.json({ received: true })
+  }
+  
+  // Process webhook
+  await processWebhook(event)
+  
+  // Mark as processed (expire after 24 hours)
+  await redis.set(`webhook:${event.id}`, "1", { ex: 86400 })
+  
+  return NextResponse.json({ received: true })
+}
+```
+
+## Async Processing
+
+For complex webhooks, process asynchronously:
+
+```typescript
+// app/api/webhooks/dodo/route.ts
+import { processWebhookTask } from "@/trigger/tasks"
+
+export async function POST(req: Request) {
+  // ... signature verification
+  
+  const event = JSON.parse(body)
+  
+  // Acknowledge immediately
+  // Process in background
+  await processWebhookTask.trigger({
+    type: event.type,
+    data: event.data,
+    eventId: event.id,
+  })
+  
+  return NextResponse.json({ received: true })
+}
+```
+
+```typescript
+// trigger/tasks.ts
+import { task } from "@trigger.dev/sdk/v3"
+
+export const processWebhookTask = task({
+  id: "process-webhook",
+  retry: {
+    maxAttempts: 5,
+    factor: 2,
+    minTimeoutInMs: 1000,
+  },
+  run: async (payload) => {
+    const { type, data, eventId } = payload
+    
+    // Check idempotency
+    const processed = await redis.get(`webhook:${eventId}`)
+    if (processed) return { skipped: true }
+    
+    // Process based on type
+    switch (type) {
+      case "payment.succeeded":
+        await handlePaymentSucceeded(data)
+        break
+      // ... other handlers
+    }
+    
+    // Mark as processed
+    await redis.set(`webhook:${eventId}`, "1", { ex: 86400 })
+    
+    return { success: true }
+  },
+})
+```
+
+## Testing Webhooks
+
+### Local Development
+
+Use tools like ngrok or Cloudflare Tunnel:
+
+```bash
+# Using ngrok
+ngrok http 3000
+
+# Your webhook URL will be:
+# https://abc123.ngrok.io/api/webhooks/dodo
+```
+
+### Test Endpoint
+
+Create a test endpoint to simulate webhooks:
+
+```typescript
+// app/api/webhooks/test/route.ts (only in development)
+import { NextResponse } from "next/server"
+
+export async function POST(req: Request) {
+  if (process.env.NODE_ENV !== "development") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+  
+  const { type, data } = await req.json()
+  
+  // Forward to actual webhook handler
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/dodo`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "dodo-signature": generateTestSignature({ type, data }),
+      },
+      body: JSON.stringify({ type, data, id: `test-${Date.now()}` }),
+    }
+  )
+  
+  return NextResponse.json({
+    status: response.status,
+    body: await response.json(),
+  })
+}
+```
+
+## Monitoring
+
+### Logging
+
+```typescript
+// lib/webhooks/logger.ts
+export function logWebhook(
+  provider: string,
+  event: string,
+  status: "success" | "error",
+  details?: any
+) {
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    type: "webhook",
+    provider,
+    event,
+    status,
+    ...details,
+  }))
+  
+  // Also send to analytics
+  posthog.capture("webhook_received", {
+    provider,
+    event,
+    status,
+  })
+}
+```
+
+### Error Alerting
+
+```typescript
+// lib/webhooks/alert.ts
+export async function alertWebhookError(
+  provider: string,
+  event: string,
+  error: Error
+) {
+  // Send to error tracking
+  console.error(`Webhook error: ${provider}/${event}`, error)
+  
+  // Send Slack/Discord notification
+  await fetch(process.env.SLACK_WEBHOOK_URL!, {
+    method: "POST",
+    body: JSON.stringify({
+      text: `⚠️ Webhook Error\nProvider: ${provider}\nEvent: ${event}\nError: ${error.message}`,
+    }),
+  })
+}
+```
+
+## Best Practices
+
+<Callout type="info">
+  **Webhook handling best practices:**
+</Callout>
+
+1. **Always verify signatures** - Never trust unverified requests
+2. **Respond quickly** - Return 200 within 5 seconds
+3. **Process asynchronously** - Use background jobs for complex logic
+4. **Implement idempotency** - Handle duplicate deliveries
+5. **Log everything** - Keep audit trail for debugging
+6. **Monitor failures** - Alert on repeated failures
+7. **Handle retries** - Providers will retry on failure
+
+## Next Steps
+
+- [Payments](/payments) - Payment webhook integration
+- [Email](/email) - Email event handling
+- [Background Jobs](/background-jobs) - Async processing

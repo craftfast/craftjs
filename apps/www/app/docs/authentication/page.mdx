@@ -1,0 +1,449 @@
+# Authentication
+
+import { Tabs, Callout, Steps } from 'nextra/components'
+
+CraftJS uses [Better Auth](https://better-auth.com/) for authentication, providing a secure and flexible auth system out of the box.
+
+## Features
+
+- ✅ **Email/Password** - Built-in with email verification
+- ✅ **OAuth** - Google and GitHub providers configured
+- ✅ **Session Management** - Secure cookie-based sessions
+- ✅ **Protected Routes** - Proxy-based route protection
+- ✅ **Type Safety** - Full TypeScript support
+
+## Configuration
+
+### Server Configuration
+
+The auth server is configured in `src/lib/auth/server.ts`:
+
+```typescript
+import { betterAuth } from "better-auth"
+import { drizzleAdapter } from "better-auth/adapters/drizzle"
+import { db } from "@/lib/db/client"
+import { env } from "@/env"
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: "pg",
+  }),
+  secret: env.BETTER_AUTH_SECRET,
+  baseURL: env.BETTER_AUTH_URL,
+  
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      // Send verification email via Resend
+      await sendVerificationEmail(user.email, url)
+    },
+  },
+  
+  socialProviders: {
+    google: {
+      clientId: env.GOOGLE_CLIENT_ID!,
+      clientSecret: env.GOOGLE_CLIENT_SECRET!,
+    },
+    github: {
+      clientId: env.GITHUB_CLIENT_ID!,
+      clientSecret: env.GITHUB_CLIENT_SECRET!,
+    },
+  },
+  
+  session: {
+    expiresIn: 60 * 60 * 24 * 7, // 7 days
+    updateAge: 60 * 60 * 24, // 1 day
+  },
+})
+
+export type Auth = typeof auth
+```
+
+### Client Configuration
+
+The auth client is configured in `src/lib/auth/client.ts`:
+
+```typescript
+import { createAuthClient } from "better-auth/react"
+
+export const authClient = createAuthClient({
+  baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL,
+})
+
+export const {
+  signIn,
+  signOut,
+  signUp,
+  useSession,
+} = authClient
+```
+
+## Usage
+
+### Getting the Current Session
+
+<Tabs items={['Client Component', 'Server Component', 'API Route']}>
+  <Tabs.Tab>
+    ```tsx
+    "use client"
+    
+    import { useSession } from "@/lib/auth/client"
+    
+    export function UserProfile() {
+      const { data: session, isPending } = useSession()
+      
+      if (isPending) return <div>Loading...</div>
+      if (!session) return <div>Not logged in</div>
+      
+      return (
+        <div>
+          <p>Welcome, {session.user.name}!</p>
+          <p>Email: {session.user.email}</p>
+        </div>
+      )
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```tsx
+    import { auth } from "@/lib/auth/server"
+    import { headers } from "next/headers"
+    
+    export default async function ProfilePage() {
+      const session = await auth.api.getSession({
+        headers: await headers(),
+      })
+      
+      if (!session) {
+        redirect("/login")
+      }
+      
+      return (
+        <div>
+          <h1>Welcome, {session.user.name}!</h1>
+        </div>
+      )
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import { auth } from "@/lib/auth/server"
+    import { headers } from "next/headers"
+    import { NextResponse } from "next/server"
+    
+    export async function GET() {
+      const session = await auth.api.getSession({
+        headers: await headers(),
+      })
+      
+      if (!session) {
+        return NextResponse.json(
+          { error: "Unauthorized" },
+          { status: 401 }
+        )
+      }
+      
+      return NextResponse.json({ user: session.user })
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Sign Up
+
+```tsx
+"use client"
+
+import { signUp } from "@/lib/auth/client"
+import { useState } from "react"
+
+export function SignUpForm() {
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [name, setName] = useState("")
+  
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    const result = await signUp.email({
+      email,
+      password,
+      name,
+    })
+    
+    if (result.error) {
+      console.error(result.error)
+    } else {
+      // Redirect to dashboard or show verification message
+    }
+  }
+  
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Name"
+      />
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email"
+      />
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Password"
+      />
+      <button type="submit">Sign Up</button>
+    </form>
+  )
+}
+```
+
+### Sign In
+
+```tsx
+"use client"
+
+import { signIn } from "@/lib/auth/client"
+
+export function SignInForm() {
+  const handleEmailSignIn = async (email: string, password: string) => {
+    const result = await signIn.email({
+      email,
+      password,
+    })
+    
+    if (result.error) {
+      console.error(result.error)
+    }
+  }
+  
+  const handleGoogleSignIn = async () => {
+    await signIn.social({
+      provider: "google",
+      callbackURL: "/dashboard",
+    })
+  }
+  
+  const handleGitHubSignIn = async () => {
+    await signIn.social({
+      provider: "github",
+      callbackURL: "/dashboard",
+    })
+  }
+  
+  // ... render form
+}
+```
+
+### Sign Out
+
+```tsx
+"use client"
+
+import { signOut } from "@/lib/auth/client"
+
+export function SignOutButton() {
+  const handleSignOut = async () => {
+    await signOut()
+  }
+  
+  return (
+    <button onClick={handleSignOut}>
+      Sign Out
+    </button>
+  )
+}
+```
+
+## Route Protection
+
+### Middleware-Based Protection
+
+CraftJS uses a proxy middleware for protecting routes. Configure protected paths in `src/proxy.ts`:
+
+```typescript
+import { defineMiddleware } from "better-auth/next-js"
+import { auth } from "@/lib/auth/server"
+
+export default defineMiddleware(auth, {
+  // Routes that require authentication
+  protectedRoutes: [
+    "/dashboard",
+    "/dashboard/*",
+    "/settings",
+    "/settings/*",
+    "/api/chat",
+    "/api/user/*",
+  ],
+  
+  // Routes that should redirect to dashboard if logged in
+  authRoutes: [
+    "/login",
+    "/register",
+  ],
+  
+  // Where to redirect unauthenticated users
+  redirectTo: "/login",
+})
+```
+
+### Component-Level Protection
+
+For more granular control:
+
+```tsx
+"use client"
+
+import { useSession } from "@/lib/auth/client"
+import { redirect } from "next/navigation"
+
+export function ProtectedComponent({ children }: { children: React.ReactNode }) {
+  const { data: session, isPending } = useSession()
+  
+  if (isPending) {
+    return <LoadingSpinner />
+  }
+  
+  if (!session) {
+    redirect("/login")
+  }
+  
+  return <>{children}</>
+}
+```
+
+## Email Verification
+
+<Steps>
+### Configure Email Sending
+
+In your auth configuration, implement the email sending:
+
+```typescript
+emailAndPassword: {
+  enabled: true,
+  requireEmailVerification: true,
+  sendVerificationEmail: async ({ user, url }) => {
+    await resend.emails.send({
+      from: env.RESEND_FROM_EMAIL,
+      to: user.email,
+      subject: "Verify your email",
+      react: VerificationEmail({ url }),
+    })
+  },
+},
+```
+
+### Create Verification Page
+
+Create a page to handle verification links at `app/(auth)/verify/page.tsx`:
+
+```tsx
+import { auth } from "@/lib/auth/server"
+
+export default async function VerifyPage({
+  searchParams,
+}: {
+  searchParams: { token?: string }
+}) {
+  if (!searchParams.token) {
+    return <div>Invalid verification link</div>
+  }
+  
+  const result = await auth.api.verifyEmail({
+    token: searchParams.token,
+  })
+  
+  if (result.error) {
+    return <div>Verification failed: {result.error.message}</div>
+  }
+  
+  return <div>Email verified successfully! You can now sign in.</div>
+}
+```
+</Steps>
+
+## Password Reset
+
+```typescript
+// Request password reset
+await authClient.forgetPassword({
+  email: "user@example.com",
+  redirectTo: "/reset-password",
+})
+
+// Reset password with token
+await authClient.resetPassword({
+  token: searchParams.token,
+  newPassword: "newSecurePassword123",
+})
+```
+
+## Database Schema
+
+Better Auth automatically manages these tables:
+
+| Table | Purpose |
+|-------|---------|
+| `user` | User accounts |
+| `session` | Active sessions |
+| `account` | OAuth accounts linked to users |
+| `verification` | Email verification tokens |
+
+<Callout type="info">
+  The schema is managed by Better Auth. Run `pnpm db:push` to sync changes.
+</Callout>
+
+## Security Best Practices
+
+1. **Use HTTPS in production** - Required for secure cookies
+2. **Set a strong secret** - Use `openssl rand -hex 32` to generate
+3. **Enable email verification** - Prevents fake signups
+4. **Implement rate limiting** - Prevent brute force attacks
+5. **Use CSRF protection** - Better Auth handles this automatically
+
+## Customization
+
+### Custom User Fields
+
+Extend the user schema in your database:
+
+```typescript
+// lib/db/schema.ts
+export const users = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name"),
+  email: text("email").notNull(),
+  // Add custom fields
+  plan: text("plan").default("free"),
+  aiCredits: integer("ai_credits").default(100),
+})
+```
+
+### Custom Session Data
+
+Include custom data in the session:
+
+```typescript
+session: {
+  expiresIn: 60 * 60 * 24 * 7,
+  cookieCache: {
+    enabled: true,
+    maxAge: 60 * 5, // 5 minutes
+  },
+},
+```
+
+## Next Steps
+
+- [AI Integration](/ai) - Add AI capabilities
+- [Payments](/payments) - Set up subscription billing
+- [Database](/database) - Learn about the database schema

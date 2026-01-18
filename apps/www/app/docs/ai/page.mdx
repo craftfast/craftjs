@@ -1,0 +1,451 @@
+# AI Integration
+
+import { Tabs, Callout, Steps } from 'nextra/components'
+
+CraftJS integrates multiple AI providers through the [Vercel AI SDK 6](https://ai-sdk.dev/), giving you flexibility to use OpenAI, Anthropic, or Google AI models.
+
+## Features
+
+- ✅ **Multi-Provider Support** - OpenAI, Anthropic, Google AI
+- ✅ **Streaming Responses** - Real-time text generation
+- ✅ **Tool Calling** - Extend AI with custom functions
+- ✅ **Rate Limiting** - Per-user request limiting
+- ✅ **Usage Tracking** - Monitor API consumption
+
+## Configuration
+
+### Environment Variables
+
+Set up at least one AI provider:
+
+```env
+# OpenAI
+OPENAI_API_KEY="sk-..."
+
+# Anthropic
+ANTHROPIC_API_KEY="sk-ant-..."
+
+# Google AI
+GOOGLE_GENERATIVE_AI_API_KEY="..."
+```
+
+### Available Models
+
+Configure models in `src/lib/ai/models.ts`:
+
+```typescript
+import { openai } from "@ai-sdk/openai"
+import { anthropic } from "@ai-sdk/anthropic"
+import { google } from "@ai-sdk/google"
+
+export const models = {
+  // OpenAI models
+  "gpt-4o": openai("gpt-4o"),
+  "gpt-4o-mini": openai("gpt-4o-mini"),
+  "gpt-4-turbo": openai("gpt-4-turbo"),
+  
+  // Anthropic models
+  "claude-sonnet-4": anthropic("claude-sonnet-4-20250514"),
+  "claude-3-5-haiku": anthropic("claude-3-5-haiku-latest"),
+  "claude-3-opus": anthropic("claude-3-opus-latest"),
+  
+  // Google models
+  "gemini-2-flash": google("gemini-2.0-flash"),
+  "gemini-1.5-pro": google("gemini-1.5-pro"),
+} as const
+
+export type ModelId = keyof typeof models
+```
+
+## Basic Usage
+
+### Simple Text Generation
+
+```typescript
+import { generateText } from "ai"
+import { models } from "@/lib/ai/models"
+
+const { text } = await generateText({
+  model: models["gpt-4o"],
+  prompt: "Explain quantum computing in simple terms.",
+})
+
+console.log(text)
+```
+
+### Streaming Responses
+
+```typescript
+import { streamText } from "ai"
+import { models } from "@/lib/ai/models"
+
+const result = await streamText({
+  model: models["claude-sonnet-4"],
+  prompt: "Write a short story about a robot learning to paint.",
+})
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk)
+}
+```
+
+## API Routes
+
+### Chat Endpoint
+
+The main chat endpoint is at `app/api/chat/route.ts`:
+
+```typescript
+import { streamText } from "ai"
+import { models, type ModelId } from "@/lib/ai/models"
+import { auth } from "@/lib/auth/server"
+import { rateLimit } from "@/lib/cache/rate-limiter"
+import { headers } from "next/headers"
+
+export async function POST(req: Request) {
+  // Authenticate user
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+  
+  if (!session) {
+    return new Response("Unauthorized", { status: 401 })
+  }
+  
+  // Rate limiting
+  const { success } = await rateLimit(session.user.id)
+  if (!success) {
+    return new Response("Rate limit exceeded", { status: 429 })
+  }
+  
+  // Parse request
+  const { messages, model = "gpt-4o" } = await req.json()
+  
+  // Generate response
+  const result = await streamText({
+    model: models[model as ModelId],
+    messages,
+    system: "You are a helpful AI assistant.",
+  })
+  
+  return result.toDataStreamResponse()
+}
+```
+
+### Using the API
+
+<Tabs items={['React Hook', 'Fetch API']}>
+  <Tabs.Tab>
+    ```tsx
+    "use client"
+    
+    import { useChat } from "ai/react"
+    
+    export function Chat() {
+      const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
+        api: "/api/chat",
+      })
+      
+      return (
+        <div className="flex flex-col h-screen">
+          <div className="flex-1 overflow-y-auto p-4">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`mb-4 ${
+                  message.role === "user" ? "text-right" : "text-left"
+                }`}
+              >
+                <span
+                  className={`inline-block p-3 rounded-lg ${
+                    message.role === "user"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200 dark:bg-gray-800"
+                  }`}
+                >
+                  {message.content}
+                </span>
+              </div>
+            ))}
+          </div>
+          
+          <form onSubmit={handleSubmit} className="p-4 border-t">
+            <div className="flex gap-2">
+              <input
+                value={input}
+                onChange={handleInputChange}
+                placeholder="Type your message..."
+                className="flex-1 p-2 border rounded"
+                disabled={isLoading}
+              />
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="px-4 py-2 bg-blue-500 text-white rounded"
+              >
+                Send
+              </button>
+            </div>
+          </form>
+        </div>
+      )
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messages: [
+          { role: "user", content: "Hello!" }
+        ],
+        model: "gpt-4o",
+      }),
+    })
+    
+    // Handle streaming response
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    
+    while (true) {
+      const { done, value } = await reader!.read()
+      if (done) break
+      console.log(decoder.decode(value))
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Tool Calling
+
+Extend AI capabilities with custom tools:
+
+### Define Tools
+
+```typescript
+// lib/ai/tools.ts
+import { tool } from "ai"
+import { z } from "zod"
+
+export const weatherTool = tool({
+  description: "Get the current weather in a location",
+  parameters: z.object({
+    location: z.string().describe("The city and country"),
+  }),
+  execute: async ({ location }) => {
+    // Call weather API
+    const weather = await fetchWeather(location)
+    return {
+      location,
+      temperature: weather.temp,
+      conditions: weather.conditions,
+    }
+  },
+})
+
+export const searchTool = tool({
+  description: "Search the web for information",
+  parameters: z.object({
+    query: z.string().describe("The search query"),
+  }),
+  execute: async ({ query }) => {
+    // Call search API
+    const results = await search(query)
+    return results
+  },
+})
+
+export const tools = {
+  weather: weatherTool,
+  search: searchTool,
+}
+```
+
+### Use Tools in Chat
+
+```typescript
+import { streamText } from "ai"
+import { tools } from "@/lib/ai/tools"
+
+const result = await streamText({
+  model: models["gpt-4o"],
+  messages,
+  tools,
+  maxToolRoundtrips: 5, // Allow multiple tool calls
+})
+```
+
+## System Prompts
+
+Define reusable prompts in `src/lib/ai/prompts.ts`:
+
+```typescript
+export const prompts = {
+  assistant: `You are a helpful AI assistant. Be concise and accurate.`,
+  
+  codeReviewer: `You are a senior software engineer reviewing code.
+Focus on:
+- Code quality and best practices
+- Potential bugs and security issues
+- Performance optimizations
+- Readability and maintainability`,
+  
+  writer: `You are a professional content writer.
+Your writing is:
+- Clear and engaging
+- Well-structured
+- SEO-optimized when appropriate
+- Free of grammatical errors`,
+}
+```
+
+Usage:
+
+```typescript
+const result = await streamText({
+  model: models["claude-sonnet-4"],
+  system: prompts.codeReviewer,
+  messages,
+})
+```
+
+## Rate Limiting
+
+CraftJS includes built-in rate limiting per user:
+
+```typescript
+// lib/cache/rate-limiter.ts
+import { Ratelimit } from "@upstash/ratelimit"
+import { redis } from "./redis"
+
+export const rateLimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(10, "1 m"), // 10 requests per minute
+  analytics: true,
+  prefix: "ratelimit:ai",
+})
+
+// Usage in API route
+const { success, remaining, reset } = await rateLimit.limit(userId)
+
+if (!success) {
+  return new Response("Rate limit exceeded", {
+    status: 429,
+    headers: {
+      "X-RateLimit-Remaining": remaining.toString(),
+      "X-RateLimit-Reset": reset.toString(),
+    },
+  })
+}
+```
+
+### Plan-Based Limits
+
+Adjust limits based on user subscription:
+
+```typescript
+export async function getRateLimit(userId: string) {
+  const user = await getUser(userId)
+  
+  const limits = {
+    free: Ratelimit.slidingWindow(10, "1 m"),
+    pro: Ratelimit.slidingWindow(100, "1 m"),
+    enterprise: Ratelimit.slidingWindow(1000, "1 m"),
+  }
+  
+  return new Ratelimit({
+    redis,
+    limiter: limits[user.plan],
+    prefix: `ratelimit:ai:${user.plan}`,
+  })
+}
+```
+
+## Usage Tracking
+
+Track AI usage for billing or analytics:
+
+```typescript
+// lib/ai/usage.ts
+import { db } from "@/lib/db/client"
+import { aiUsage } from "@/lib/db/schema"
+
+export async function trackUsage(
+  userId: string,
+  model: string,
+  promptTokens: number,
+  completionTokens: number
+) {
+  await db.insert(aiUsage).values({
+    userId,
+    model,
+    promptTokens,
+    completionTokens,
+    totalTokens: promptTokens + completionTokens,
+    timestamp: new Date(),
+  })
+}
+```
+
+Use in API route:
+
+```typescript
+const result = await streamText({
+  model: models[modelId],
+  messages,
+  onFinish: async (result) => {
+    await trackUsage(
+      session.user.id,
+      modelId,
+      result.usage.promptTokens,
+      result.usage.completionTokens
+    )
+  },
+})
+```
+
+## Error Handling
+
+```typescript
+import { AISDKError } from "ai"
+
+try {
+  const result = await generateText({
+    model: models["gpt-4o"],
+    prompt: "...",
+  })
+} catch (error) {
+  if (error instanceof AISDKError) {
+    if (error.code === "rate_limit_exceeded") {
+      // Handle rate limit
+    } else if (error.code === "invalid_api_key") {
+      // Handle invalid key
+    }
+  }
+  throw error
+}
+```
+
+## Best Practices
+
+<Callout type="info">
+  **Tips for production AI applications:**
+</Callout>
+
+1. **Always implement rate limiting** - Protect against abuse
+2. **Stream responses** - Better UX for long responses
+3. **Use appropriate models** - GPT-4o-mini for simple tasks, GPT-4o for complex
+4. **Set max tokens** - Prevent runaway costs
+5. **Log usage** - Track costs and identify issues
+6. **Handle errors gracefully** - Show user-friendly messages
+7. **Cache when possible** - Reduce API calls for repeated queries
+
+## Next Steps
+
+- [Building a Chatbot](/building-chatbot) - Complete chatbot guide
+- [Custom AI Tools](/custom-ai-tools) - Create powerful tools
+- [Payments](/payments) - Bill users for AI usage

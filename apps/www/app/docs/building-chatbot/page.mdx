@@ -1,0 +1,537 @@
+# Building a Chatbot
+
+import { Steps, Callout, Tabs } from 'nextra/components'
+
+This guide walks you through building a full-featured AI chatbot with CraftJS.
+
+## What We'll Build
+
+A chatbot that:
+- Streams responses in real-time
+- Supports multiple AI models
+- Saves chat history
+- Includes rate limiting
+- Has a polished UI
+
+## Prerequisites
+
+- CraftJS project set up
+- At least one AI provider configured
+- Database set up
+
+<Steps>
+### Create the Chat Schema
+
+Add a chats table to your database schema:
+
+```typescript
+// lib/db/schema.ts
+export const chats = pgTable("chat", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  model: text("model").notNull().default("gpt-4o"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+})
+
+export const messages = pgTable("message", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  chatId: text("chat_id")
+    .notNull()
+    .references(() => chats.id, { onDelete: "cascade" }),
+  role: text("role").notNull(), // "user" | "assistant"
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+})
+```
+
+Push the schema:
+
+```bash
+pnpm db:push
+```
+
+### Create the Chat API Route
+
+```typescript
+// app/api/chat/route.ts
+import { streamText } from "ai"
+import { models, type ModelId } from "@/lib/ai/models"
+import { auth } from "@/lib/auth/server"
+import { rateLimit } from "@/lib/cache/rate-limiter"
+import { db } from "@/lib/db/client"
+import { chats, messages } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
+import { headers } from "next/headers"
+
+export async function POST(req: Request) {
+  // Authenticate
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+  
+  if (!session) {
+    return new Response("Unauthorized", { status: 401 })
+  }
+  
+  // Rate limit
+  const { success, remaining } = await rateLimit.limit(session.user.id)
+  if (!success) {
+    return new Response("Rate limit exceeded", {
+      status: 429,
+      headers: { "X-RateLimit-Remaining": remaining.toString() },
+    })
+  }
+  
+  // Parse request
+  const { messages: chatMessages, chatId, model = "gpt-4o" } = await req.json()
+  
+  // Get or create chat
+  let chat
+  if (chatId) {
+    const [existingChat] = await db
+      .select()
+      .from(chats)
+      .where(eq(chats.id, chatId))
+      .limit(1)
+    chat = existingChat
+  } else {
+    // Create new chat with first message as title
+    const [newChat] = await db
+      .insert(chats)
+      .values({
+        userId: session.user.id,
+        title: chatMessages[0]?.content.slice(0, 50) || "New Chat",
+        model,
+      })
+      .returning()
+    chat = newChat
+  }
+  
+  // Save user message
+  const lastUserMessage = chatMessages[chatMessages.length - 1]
+  if (lastUserMessage?.role === "user") {
+    await db.insert(messages).values({
+      chatId: chat.id,
+      role: "user",
+      content: lastUserMessage.content,
+    })
+  }
+  
+  // Generate response
+  const result = await streamText({
+    model: models[model as ModelId],
+    messages: chatMessages,
+    system: `You are a helpful AI assistant. Be concise and accurate.`,
+    onFinish: async ({ text }) => {
+      // Save assistant message
+      await db.insert(messages).values({
+        chatId: chat.id,
+        role: "assistant",
+        content: text,
+      })
+    },
+  })
+  
+  return result.toDataStreamResponse({
+    headers: {
+      "X-Chat-Id": chat.id,
+    },
+  })
+}
+```
+
+### Create API for Chat History
+
+```typescript
+// app/api/chats/route.ts
+import { NextResponse } from "next/server"
+import { auth } from "@/lib/auth/server"
+import { db } from "@/lib/db/client"
+import { chats } from "@/lib/db/schema"
+import { eq, desc } from "drizzle-orm"
+import { headers } from "next/headers"
+
+export async function GET() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+  
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  
+  const userChats = await db
+    .select()
+    .from(chats)
+    .where(eq(chats.userId, session.user.id))
+    .orderBy(desc(chats.updatedAt))
+    .limit(50)
+  
+  return NextResponse.json(userChats)
+}
+```
+
+```typescript
+// app/api/chats/[id]/messages/route.ts
+import { NextResponse } from "next/server"
+import { auth } from "@/lib/auth/server"
+import { db } from "@/lib/db/client"
+import { chats, messages } from "@/lib/db/schema"
+import { eq, and, asc } from "drizzle-orm"
+import { headers } from "next/headers"
+
+export async function GET(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+  
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  
+  // Verify ownership
+  const [chat] = await db
+    .select()
+    .from(chats)
+    .where(
+      and(
+        eq(chats.id, params.id),
+        eq(chats.userId, session.user.id)
+      )
+    )
+    .limit(1)
+  
+  if (!chat) {
+    return NextResponse.json({ error: "Chat not found" }, { status: 404 })
+  }
+  
+  const chatMessages = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.chatId, params.id))
+    .orderBy(asc(messages.createdAt))
+  
+  return NextResponse.json(chatMessages)
+}
+```
+
+### Build the Chat UI
+
+```tsx
+// app/(dashboard)/chat/page.tsx
+"use client"
+
+import { useChat } from "ai/react"
+import { useState, useRef, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
+import { Send, Bot, User, Loader2 } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+const models = [
+  { id: "gpt-4o", name: "GPT-4o" },
+  { id: "claude-sonnet-4", name: "Claude Sonnet 4" },
+  { id: "gemini-2-flash", name: "Gemini 2 Flash" },
+]
+
+export default function ChatPage() {
+  const [selectedModel, setSelectedModel] = useState("gpt-4o")
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  
+  const {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    error,
+  } = useChat({
+    api: "/api/chat",
+    body: { model: selectedModel },
+  })
+  
+  // Auto-scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
+  
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!input.trim() || isLoading) return
+    handleSubmit(e)
+  }
+  
+  return (
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b">
+        <h1 className="text-xl font-semibold">AI Chat</h1>
+        <select
+          value={selectedModel}
+          onChange={(e) => setSelectedModel(e.target.value)}
+          className="px-3 py-2 border rounded-lg"
+        >
+          {models.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.length === 0 && (
+          <div className="text-center text-gray-500 mt-8">
+            <Bot className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p>Start a conversation with the AI assistant</p>
+          </div>
+        )}
+        
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={cn(
+              "flex gap-3 max-w-3xl",
+              message.role === "user" ? "ml-auto flex-row-reverse" : ""
+            )}
+          >
+            <div
+              className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                message.role === "user"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-200 dark:bg-gray-800"
+              )}
+            >
+              {message.role === "user" ? (
+                <User className="w-4 h-4" />
+              ) : (
+                <Bot className="w-4 h-4" />
+              )}
+            </div>
+            <div
+              className={cn(
+                "px-4 py-3 rounded-2xl",
+                message.role === "user"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-100 dark:bg-gray-800"
+              )}
+            >
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            </div>
+          </div>
+        ))}
+        
+        {isLoading && (
+          <div className="flex gap-3">
+            <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-800 flex items-center justify-center">
+              <Bot className="w-4 h-4" />
+            </div>
+            <div className="px-4 py-3 rounded-2xl bg-gray-100 dark:bg-gray-800">
+              <Loader2 className="w-4 h-4 animate-spin" />
+            </div>
+          </div>
+        )}
+        
+        {error && (
+          <div className="text-red-500 text-center">
+            Error: {error.message}
+          </div>
+        )}
+        
+        <div ref={messagesEndRef} />
+      </div>
+      
+      {/* Input */}
+      <form onSubmit={onSubmit} className="p-4 border-t">
+        <div className="flex gap-2 max-w-3xl mx-auto">
+          <Textarea
+            value={input}
+            onChange={handleInputChange}
+            placeholder="Type your message..."
+            className="min-h-[50px] max-h-[200px] resize-none"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                onSubmit(e)
+              }
+            }}
+          />
+          <Button type="submit" disabled={isLoading || !input.trim()}>
+            <Send className="w-4 h-4" />
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+}
+```
+
+### Add Chat Sidebar
+
+```tsx
+// components/chat/chat-sidebar.tsx
+"use client"
+
+import { useQuery } from "@tanstack/react-query"
+import { useRouter, usePathname } from "next/navigation"
+import { MessageSquare, Plus, Trash2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+
+interface Chat {
+  id: string
+  title: string
+  updatedAt: string
+}
+
+export function ChatSidebar() {
+  const router = useRouter()
+  const pathname = usePathname()
+  
+  const { data: chats, isLoading } = useQuery<Chat[]>({
+    queryKey: ["chats"],
+    queryFn: async () => {
+      const res = await fetch("/api/chats")
+      return res.json()
+    },
+  })
+  
+  const handleNewChat = () => {
+    router.push("/chat")
+  }
+  
+  const handleDeleteChat = async (chatId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    await fetch(`/api/chats/${chatId}`, { method: "DELETE" })
+    // Refetch chats
+  }
+  
+  return (
+    <div className="w-64 border-r h-full flex flex-col">
+      <div className="p-4">
+        <Button onClick={handleNewChat} className="w-full">
+          <Plus className="w-4 h-4 mr-2" />
+          New Chat
+        </Button>
+      </div>
+      
+      <div className="flex-1 overflow-y-auto">
+        {isLoading ? (
+          <div className="p-4 text-center text-gray-500">Loading...</div>
+        ) : (
+          <div className="space-y-1 p-2">
+            {chats?.map((chat) => (
+              <button
+                key={chat.id}
+                onClick={() => router.push(`/chat/${chat.id}`)}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-gray-100 dark:hover:bg-gray-800 group",
+                  pathname === `/chat/${chat.id}` && "bg-gray-100 dark:bg-gray-800"
+                )}
+              >
+                <MessageSquare className="w-4 h-4 shrink-0" />
+                <span className="truncate flex-1">{chat.title}</span>
+                <button
+                  onClick={(e) => handleDeleteChat(chat.id, e)}
+                  className="opacity-0 group-hover:opacity-100 hover:text-red-500"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+### Add Markdown Rendering
+
+```bash
+pnpm add react-markdown remark-gfm
+```
+
+```tsx
+// components/chat/message-content.tsx
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+
+interface MessageContentProps {
+  content: string
+}
+
+export function MessageContent({ content }: MessageContentProps) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        code({ node, inline, className, children, ...props }) {
+          return inline ? (
+            <code className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded" {...props}>
+              {children}
+            </code>
+          ) : (
+            <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto">
+              <code {...props}>{children}</code>
+            </pre>
+          )
+        },
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  )
+}
+```
+</Steps>
+
+## Enhancements
+
+### Add Typing Indicator
+
+```tsx
+const TypingIndicator = () => (
+  <div className="flex gap-1">
+    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+  </div>
+)
+```
+
+### Add Copy Message Button
+
+```tsx
+const CopyButton = ({ text }: { text: string }) => {
+  const [copied, setCopied] = useState(false)
+  
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  
+  return (
+    <button onClick={handleCopy} className="text-gray-500 hover:text-gray-700">
+      {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+    </button>
+  )
+}
+```
+
+## Next Steps
+
+- [Custom AI Tools](/custom-ai-tools) - Add tool calling
+- [AI Integration](/ai) - Learn more about AI features
+- [Caching](/caching) - Cache chat responses

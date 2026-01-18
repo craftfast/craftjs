@@ -1,0 +1,121 @@
+# API Routes
+
+import { Callout } from 'nextra/components'
+
+This section documents all API endpoints available in CraftJS.
+
+## Overview
+
+CraftJS provides RESTful API endpoints for all major features:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/auth/*` | Various | Authentication (Better Auth) |
+| `/api/chat` | POST | AI chat completions |
+| `/api/chats` | GET | List user chats |
+| `/api/chats/[id]` | GET/DELETE | Get or delete a chat |
+| `/api/upload` | POST | Get file upload URL |
+| `/api/checkout` | POST | Create payment checkout |
+| `/api/billing/portal` | POST | Access billing portal |
+| `/api/webhooks/*` | POST | Webhook handlers |
+
+## Authentication
+
+All API routes (except webhooks and public endpoints) require authentication. Include the session cookie or use the auth header.
+
+### Session Cookie
+
+Authentication is automatic when using cookies (default browser behavior).
+
+### API Key (Coming Soon)
+
+For programmatic access:
+
+```bash
+curl -X POST https://yourapp.com/api/chat \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [...]}'
+```
+
+## Rate Limiting
+
+API endpoints are rate limited per user:
+
+| Plan | Limit |
+|------|-------|
+| Free | 10 requests/minute |
+| Pro | 100 requests/minute |
+| Enterprise | 1000 requests/minute |
+
+Rate limit headers are included in responses:
+
+```
+X-RateLimit-Remaining: 9
+X-RateLimit-Reset: 1699999999999
+```
+
+## Error Responses
+
+All errors follow a consistent format:
+
+```json
+{
+  "error": "Error message",
+  "code": "ERROR_CODE",
+  "details": {}
+}
+```
+
+### Common Error Codes
+
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | `INVALID_REQUEST` | Invalid request body |
+| 401 | `UNAUTHORIZED` | Not authenticated |
+| 403 | `FORBIDDEN` | Not authorized for this resource |
+| 404 | `NOT_FOUND` | Resource not found |
+| 429 | `RATE_LIMITED` | Rate limit exceeded |
+| 500 | `INTERNAL_ERROR` | Server error |
+
+## CORS
+
+CORS is configured to allow requests from:
+- Your production domain
+- `localhost` in development
+
+To customize, update `next.config.ts`:
+
+```typescript
+async headers() {
+  return [
+    {
+      source: "/api/:path*",
+      headers: [
+        { key: "Access-Control-Allow-Origin", value: "https://yourdomain.com" },
+        { key: "Access-Control-Allow-Methods", value: "GET,POST,DELETE" },
+        { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
+      ],
+    },
+  ]
+}
+```
+
+## API Sections
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+  <a href="/api-auth" className="block p-6 border rounded-lg hover:border-blue-500">
+    <h3 className="font-semibold text-lg">Auth API</h3>
+    <p className="text-gray-500">Authentication endpoints</p>
+  </a>
+  
+  <a href="/api-ai" className="block p-6 border rounded-lg hover:border-blue-500">
+    <h3 className="font-semibold text-lg">AI API</h3>
+    <p className="text-gray-500">Chat and completions</p>
+  </a>
+  
+  <a href="/api-payments" className="block p-6 border rounded-lg hover:border-blue-500">
+    <h3 className="font-semibold text-lg">Payments API</h3>
+    <p className="text-gray-500">Billing and subscriptions</p>
+  </a>
+</div>

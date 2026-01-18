@@ -1,0 +1,427 @@
+# Deployment
+
+import { Steps, Callout, Tabs } from 'nextra/components'
+
+This guide covers deploying your CraftJS application to production.
+
+## Vercel (Recommended)
+
+CraftJS is optimized for Vercel deployment.
+
+<Steps>
+### Push to GitHub
+
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/yourusername/your-app.git
+git push -u origin main
+```
+
+### Import to Vercel
+
+1. Go to [vercel.com/new](https://vercel.com/new)
+2. Import your GitHub repository
+3. Vercel auto-detects Next.js settings
+
+### Configure Environment Variables
+
+In Project Settings > Environment Variables, add all your secrets:
+
+```env
+DATABASE_URL=postgresql://...
+BETTER_AUTH_SECRET=...
+BETTER_AUTH_URL=https://your-app.vercel.app
+OPENAI_API_KEY=...
+# ... all other variables
+```
+
+<Callout type="warning">
+  Make sure `BETTER_AUTH_URL` matches your production domain.
+</Callout>
+
+### Deploy
+
+Click "Deploy" and Vercel will:
+1. Install dependencies
+2. Build the application
+3. Deploy to the edge network
+
+### Configure Custom Domain (Optional)
+
+1. Go to Project Settings > Domains
+2. Add your custom domain
+3. Update DNS records as instructed
+4. Update `BETTER_AUTH_URL` to your domain
+</Steps>
+
+## Other Platforms
+
+### Railway
+
+<Steps>
+### Install Railway CLI
+
+```bash
+npm install -g @railway/cli
+railway login
+```
+
+### Deploy
+
+```bash
+railway init
+railway up
+```
+
+### Configure
+
+Add environment variables in the Railway dashboard.
+</Steps>
+
+### Render
+
+<Steps>
+### Create Web Service
+
+1. Go to [render.com](https://render.com)
+2. Create a new Web Service
+3. Connect your GitHub repo
+
+### Configure Build
+
+- **Build Command**: `pnpm install && pnpm build`
+- **Start Command**: `pnpm start`
+
+### Environment Variables
+
+Add all environment variables in the dashboard.
+</Steps>
+
+### Docker
+
+Create a `Dockerfile`:
+
+```dockerfile
+# Dockerfile
+FROM node:20-alpine AS base
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Dependencies
+FROM base AS deps
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Builder
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN pnpm build
+
+# Runner
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+EXPOSE 3000
+ENV PORT=3000
+
+CMD ["node", "server.js"]
+```
+
+Update `next.config.ts`:
+
+```typescript
+const nextConfig = {
+  output: "standalone",
+}
+```
+
+Build and run:
+
+```bash
+docker build -t my-app .
+docker run -p 3000:3000 --env-file .env my-app
+```
+
+## Production Checklist
+
+### Environment Variables
+
+Ensure all required variables are set:
+
+```env
+# Required
+DATABASE_URL=postgresql://...
+BETTER_AUTH_SECRET=... # At least 32 characters
+BETTER_AUTH_URL=https://your-domain.com
+
+# At least one AI provider
+OPENAI_API_KEY=sk-...
+
+# For full functionality
+RESEND_API_KEY=re_...
+UPSTASH_REDIS_REST_URL=...
+UPSTASH_REDIS_REST_TOKEN=...
+DODO_API_KEY=...
+DODO_WEBHOOK_SECRET=...
+```
+
+### Database
+
+<Steps>
+### Run Migrations
+
+```bash
+pnpm db:migrate
+```
+
+### Verify Connection
+
+Test your production database connection before deploying.
+
+### Set Up Backups
+
+Enable automated backups in Neon or your database provider.
+</Steps>
+
+### Security
+
+<Callout type="warning">
+  **Production security checklist:**
+</Callout>
+
+1. **Use HTTPS** - Vercel handles this automatically
+2. **Strong secrets** - Generate with `openssl rand -hex 32`
+3. **Secure cookies** - Better Auth handles this
+4. **Rate limiting** - Configure for production load
+5. **CORS settings** - Restrict to your domains
+6. **Content Security Policy** - Configure in headers
+
+### Headers
+
+Add security headers in `next.config.ts`:
+
+```typescript
+const nextConfig = {
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "X-DNS-Prefetch-Control",
+            value: "on",
+          },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+          {
+            key: "X-Frame-Options",
+            value: "DENY",
+          },
+          {
+            key: "X-XSS-Protection",
+            value: "1; mode=block",
+          },
+          {
+            key: "Referrer-Policy",
+            value: "origin-when-cross-origin",
+          },
+        ],
+      },
+    ]
+  },
+}
+```
+
+### Performance
+
+1. **Enable caching** - Use Redis for frequently accessed data
+2. **Optimize images** - Use Next.js Image component
+3. **Code splitting** - Next.js handles this automatically
+4. **Edge functions** - Deploy API routes to the edge
+
+### Monitoring
+
+<Tabs items={['Error Tracking', 'APM', 'Logs']}>
+  <Tabs.Tab>
+    Add Sentry for error tracking:
+    
+    ```bash
+    pnpm add @sentry/nextjs
+    ```
+    
+    ```typescript
+    // sentry.client.config.ts
+    import * as Sentry from "@sentry/nextjs"
+    
+    Sentry.init({
+      dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+      tracesSampleRate: 0.1,
+    })
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Use Vercel Analytics:
+    
+    ```bash
+    pnpm add @vercel/analytics
+    ```
+    
+    ```tsx
+    // app/layout.tsx
+    import { Analytics } from "@vercel/analytics/react"
+    
+    export default function RootLayout({ children }) {
+      return (
+        <html>
+          <body>
+            {children}
+            <Analytics />
+          </body>
+        </html>
+      )
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Use structured logging:
+    
+    ```typescript
+    // lib/logger.ts
+    export function log(level: string, message: string, data?: any) {
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level,
+        message,
+        ...data,
+      }))
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Webhooks
+
+Update webhook URLs in provider dashboards:
+
+| Provider | Webhook URL |
+|----------|-------------|
+| Dodo Payments | `https://your-domain.com/api/webhooks/dodo` |
+| Resend | `https://your-domain.com/api/webhooks/resend` |
+| Trigger.dev | Automatic |
+
+### DNS & Email
+
+For email deliverability:
+
+1. **Verify domain** in Resend
+2. **Add SPF record** - Provided by Resend
+3. **Add DKIM record** - Provided by Resend
+4. **Add DMARC record** - For email authentication
+
+## Rollback Strategy
+
+### Vercel
+
+```bash
+# List deployments
+vercel ls
+
+# Rollback to previous deployment
+vercel rollback
+```
+
+### Database
+
+Always backup before migrations:
+
+```bash
+# Backup current state
+pg_dump $DATABASE_URL > backup.sql
+
+# Restore if needed
+psql $DATABASE_URL < backup.sql
+```
+
+## Scaling
+
+### Vercel Pro/Enterprise
+
+- Increased function duration
+- More concurrent executions
+- Team collaboration
+
+### Database Scaling
+
+Neon scales automatically. For high load:
+- Enable connection pooling
+- Consider read replicas
+
+### Redis Scaling
+
+Upstash scales automatically. Monitor usage in dashboard.
+
+## CI/CD
+
+Example GitHub Actions workflow:
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 9
+          
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+          
+      - run: pnpm install
+      - run: pnpm lint
+      - run: pnpm build
+      
+      - uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: "--prod"
+```
+
+## Next Steps
+
+- [Configuration](/configuration) - Production config
+- [Caching](/caching) - Production caching
+- [Analytics](/analytics) - Production monitoring

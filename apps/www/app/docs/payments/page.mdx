@@ -1,0 +1,493 @@
+# Payments
+
+import { Tabs, Callout, Steps } from 'nextra/components'
+
+CraftJS integrates [Dodo Payments](https://dodopayments.com/) for subscription billing, providing a simple and developer-friendly payment solution.
+
+## Features
+
+- ✅ **Subscription Billing** - Monthly/yearly plans
+- ✅ **Pre-configured Plans** - Free, Pro, Enterprise tiers
+- ✅ **Webhook Handling** - Automatic subscription updates
+- ✅ **Usage-Based Billing** - Track and bill for AI usage
+- ✅ **Customer Portal** - Self-service subscription management
+
+## Configuration
+
+### Environment Variables
+
+```env
+DODO_API_KEY="your-dodo-api-key"
+DODO_WEBHOOK_SECRET="your-webhook-secret"
+```
+
+Get your API keys from the [Dodo Payments Dashboard](https://dodopayments.com/).
+
+### Plans Configuration
+
+Define your plans in `src/lib/payments/plans.ts`:
+
+```typescript
+export const plans = {
+  free: {
+    id: "free",
+    name: "Free",
+    price: 0,
+    priceId: null,
+    features: [
+      "100 AI requests/month",
+      "10MB storage",
+      "Basic support",
+    ],
+    limits: {
+      aiRequests: 100,
+      storage: 10 * 1024 * 1024, // 10MB
+    },
+  },
+  pro: {
+    id: "pro",
+    name: "Pro",
+    price: 19,
+    priceId: "price_pro_monthly", // Your Dodo price ID
+    features: [
+      "10,000 AI requests/month",
+      "10GB storage",
+      "Priority support",
+      "Advanced analytics",
+    ],
+    limits: {
+      aiRequests: 10000,
+      storage: 10 * 1024 * 1024 * 1024, // 10GB
+    },
+  },
+  enterprise: {
+    id: "enterprise",
+    name: "Enterprise",
+    price: 99,
+    priceId: "price_enterprise_monthly",
+    features: [
+      "Unlimited AI requests",
+      "100GB storage",
+      "24/7 dedicated support",
+      "Custom integrations",
+      "SSO",
+    ],
+    limits: {
+      aiRequests: Infinity,
+      storage: 100 * 1024 * 1024 * 1024, // 100GB
+    },
+  },
+} as const
+
+export type PlanId = keyof typeof plans
+```
+
+## Payment Client
+
+Set up the Dodo client in `src/lib/payments/client.ts`:
+
+```typescript
+import { Dodo } from "@dodopayments/sdk"
+import { env } from "@/env"
+
+export const dodo = new Dodo({
+  apiKey: env.DODO_API_KEY,
+})
+```
+
+## Creating Checkouts
+
+### Checkout API Route
+
+```typescript
+// app/api/checkout/route.ts
+import { NextResponse } from "next/server"
+import { auth } from "@/lib/auth/server"
+import { dodo } from "@/lib/payments/client"
+import { plans } from "@/lib/payments/plans"
+import { headers } from "next/headers"
+
+export async function POST(req: Request) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+  
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  
+  const { planId } = await req.json()
+  const plan = plans[planId as keyof typeof plans]
+  
+  if (!plan || !plan.priceId) {
+    return NextResponse.json({ error: "Invalid plan" }, { status: 400 })
+  }
+  
+  const checkout = await dodo.checkout.create({
+    customer: {
+      email: session.user.email,
+      name: session.user.name,
+    },
+    items: [
+      {
+        priceId: plan.priceId,
+        quantity: 1,
+      },
+    ],
+    successUrl: `${env.BETTER_AUTH_URL}/dashboard?checkout=success`,
+    cancelUrl: `${env.BETTER_AUTH_URL}/pricing?checkout=canceled`,
+    metadata: {
+      userId: session.user.id,
+      planId: plan.id,
+    },
+  })
+  
+  return NextResponse.json({ url: checkout.url })
+}
+```
+
+### Checkout Button Component
+
+```tsx
+"use client"
+
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+
+interface CheckoutButtonProps {
+  planId: string
+  children: React.ReactNode
+}
+
+export function CheckoutButton({ planId, children }: CheckoutButtonProps) {
+  const [loading, setLoading] = useState(false)
+  
+  const handleCheckout = async () => {
+    setLoading(true)
+    
+    try {
+      const response = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId }),
+      })
+      
+      const { url, error } = await response.json()
+      
+      if (error) {
+        throw new Error(error)
+      }
+      
+      window.location.href = url
+    } catch (error) {
+      console.error("Checkout error:", error)
+      // Show error toast
+    } finally {
+      setLoading(false)
+    }
+  }
+  
+  return (
+    <Button onClick={handleCheckout} disabled={loading}>
+      {loading ? "Loading..." : children}
+    </Button>
+  )
+}
+```
+
+## Webhook Handling
+
+<Steps>
+### Create Webhook Endpoint
+
+```typescript
+// app/api/webhooks/dodo/route.ts
+import { NextResponse } from "next/server"
+import { headers } from "next/headers"
+import { dodo } from "@/lib/payments/client"
+import { db } from "@/lib/db/client"
+import { users, subscriptions } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
+import { env } from "@/env"
+
+export async function POST(req: Request) {
+  const body = await req.text()
+  const headersList = await headers()
+  const signature = headersList.get("dodo-signature")
+  
+  // Verify webhook signature
+  let event
+  try {
+    event = dodo.webhooks.verify(body, signature!, env.DODO_WEBHOOK_SECRET)
+  } catch (err) {
+    console.error("Webhook verification failed:", err)
+    return NextResponse.json({ error: "Invalid signature" }, { status: 400 })
+  }
+  
+  // Handle different event types
+  switch (event.type) {
+    case "checkout.completed":
+      await handleCheckoutCompleted(event.data)
+      break
+      
+    case "subscription.created":
+      await handleSubscriptionCreated(event.data)
+      break
+      
+    case "subscription.updated":
+      await handleSubscriptionUpdated(event.data)
+      break
+      
+    case "subscription.canceled":
+      await handleSubscriptionCanceled(event.data)
+      break
+      
+    case "payment.failed":
+      await handlePaymentFailed(event.data)
+      break
+      
+    default:
+      console.log(`Unhandled event type: ${event.type}`)
+  }
+  
+  return NextResponse.json({ received: true })
+}
+
+async function handleCheckoutCompleted(data: any) {
+  const { userId, planId } = data.metadata
+  
+  // Update user plan
+  await db
+    .update(users)
+    .set({ plan: planId })
+    .where(eq(users.id, userId))
+}
+
+async function handleSubscriptionCreated(data: any) {
+  const { userId, planId } = data.metadata
+  
+  await db.insert(subscriptions).values({
+    id: data.subscriptionId,
+    userId,
+    plan: planId,
+    status: data.status,
+    currentPeriodStart: new Date(data.currentPeriodStart),
+    currentPeriodEnd: new Date(data.currentPeriodEnd),
+  })
+}
+
+async function handleSubscriptionUpdated(data: any) {
+  await db
+    .update(subscriptions)
+    .set({
+      status: data.status,
+      currentPeriodEnd: new Date(data.currentPeriodEnd),
+      cancelAtPeriodEnd: data.cancelAtPeriodEnd,
+      updatedAt: new Date(),
+    })
+    .where(eq(subscriptions.id, data.subscriptionId))
+}
+
+async function handleSubscriptionCanceled(data: any) {
+  const { userId } = data.metadata
+  
+  // Downgrade to free plan
+  await db
+    .update(users)
+    .set({ plan: "free" })
+    .where(eq(users.id, userId))
+    
+  await db
+    .update(subscriptions)
+    .set({ status: "canceled", updatedAt: new Date() })
+    .where(eq(subscriptions.id, data.subscriptionId))
+}
+
+async function handlePaymentFailed(data: any) {
+  // Send notification email
+  // Update subscription status
+}
+```
+
+### Configure Webhook in Dodo Dashboard
+
+1. Go to Dodo Payments Dashboard
+2. Navigate to Webhooks
+3. Add endpoint: `https://yourdomain.com/api/webhooks/dodo`
+4. Select events to listen for
+5. Copy the webhook secret to your environment variables
+</Steps>
+
+## Customer Portal
+
+Allow users to manage their subscription:
+
+```typescript
+// app/api/billing/portal/route.ts
+import { NextResponse } from "next/server"
+import { auth } from "@/lib/auth/server"
+import { dodo } from "@/lib/payments/client"
+import { headers } from "next/headers"
+
+export async function POST(req: Request) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
+  
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  
+  const portalSession = await dodo.billingPortal.create({
+    customerId: session.user.id,
+    returnUrl: `${env.BETTER_AUTH_URL}/settings/billing`,
+  })
+  
+  return NextResponse.json({ url: portalSession.url })
+}
+```
+
+## Checking Subscription Status
+
+### Server-Side
+
+```typescript
+import { db } from "@/lib/db/client"
+import { users, subscriptions } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
+
+export async function getUserPlan(userId: string) {
+  const [user] = await db
+    .select({ plan: users.plan })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+    
+  return user?.plan ?? "free"
+}
+
+export async function hasActiveSubscription(userId: string) {
+  const [sub] = await db
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.userId, userId))
+    .limit(1)
+    
+  return sub?.status === "active"
+}
+```
+
+### Client-Side Hook
+
+```typescript
+"use client"
+
+import { useSession } from "@/lib/auth/client"
+import { useQuery } from "@tanstack/react-query"
+
+export function useSubscription() {
+  const { data: session } = useSession()
+  
+  return useQuery({
+    queryKey: ["subscription", session?.user.id],
+    queryFn: async () => {
+      const res = await fetch("/api/billing/subscription")
+      return res.json()
+    },
+    enabled: !!session,
+  })
+}
+```
+
+## Pricing Page Component
+
+```tsx
+import { plans } from "@/lib/payments/plans"
+import { CheckoutButton } from "@/components/checkout-button"
+import { Check } from "lucide-react"
+
+export function PricingPage() {
+  return (
+    <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto p-8">
+      {Object.values(plans).map((plan) => (
+        <div
+          key={plan.id}
+          className="border rounded-xl p-6 flex flex-col"
+        >
+          <h3 className="text-2xl font-bold">{plan.name}</h3>
+          <div className="mt-4">
+            <span className="text-4xl font-bold">${plan.price}</span>
+            {plan.price > 0 && <span className="text-gray-500">/month</span>}
+          </div>
+          
+          <ul className="mt-6 space-y-3 flex-1">
+            {plan.features.map((feature) => (
+              <li key={feature} className="flex items-center gap-2">
+                <Check className="w-5 h-5 text-green-500" />
+                <span>{feature}</span>
+              </li>
+            ))}
+          </ul>
+          
+          <div className="mt-8">
+            {plan.priceId ? (
+              <CheckoutButton planId={plan.id}>
+                Get {plan.name}
+              </CheckoutButton>
+            ) : (
+              <button className="w-full py-2 border rounded-lg">
+                Current Plan
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+## Usage-Based Billing
+
+Track usage and bill accordingly:
+
+```typescript
+// Track AI usage
+export async function trackAIUsage(userId: string, tokens: number) {
+  await db.insert(aiUsage).values({
+    id: crypto.randomUUID(),
+    userId,
+    tokens,
+    createdAt: new Date(),
+  })
+}
+
+// Calculate monthly usage
+export async function getMonthlyUsage(userId: string) {
+  const startOfMonth = new Date()
+  startOfMonth.setDate(1)
+  startOfMonth.setHours(0, 0, 0, 0)
+  
+  const result = await db
+    .select({ total: sum(aiUsage.tokens) })
+    .from(aiUsage)
+    .where(
+      and(
+        eq(aiUsage.userId, userId),
+        gte(aiUsage.createdAt, startOfMonth)
+      )
+    )
+    
+  return result[0]?.total ?? 0
+}
+```
+
+<Callout type="info">
+  For high-volume usage tracking, consider using [Upstash Redis](/caching) for real-time counting, then batch-inserting to the database.
+</Callout>
+
+## Next Steps
+
+- [Email](/email) - Send payment notifications
+- [Background Jobs](/background-jobs) - Process payments async
+- [Webhook Handling](/webhook-handling) - Advanced webhook patterns

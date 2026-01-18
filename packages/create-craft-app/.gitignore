@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/*
+
+# Template node_modules (don't include in package)
+template/node_modules/
+template/.next/
+template/.env
+
+# Misc
+*.log
+.DS_Store

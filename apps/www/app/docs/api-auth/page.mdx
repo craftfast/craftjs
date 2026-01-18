@@ -1,0 +1,317 @@
+# Auth API
+
+import { Tabs } from 'nextra/components'
+
+Better Auth provides a comprehensive authentication API. All endpoints are under `/api/auth/`.
+
+## Endpoints
+
+### Sign Up
+
+Create a new user account with email and password.
+
+```
+POST /api/auth/sign-up/email
+```
+
+**Request Body:**
+
+```json
+{
+  "email": "user@example.com",
+  "password": "securepassword123",
+  "name": "John Doe"
+}
+```
+
+**Response:**
+
+```json
+{
+  "user": {
+    "id": "user_123",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "emailVerified": false,
+    "createdAt": "2024-01-01T00:00:00.000Z"
+  }
+}
+```
+
+### Sign In
+
+Authenticate an existing user.
+
+```
+POST /api/auth/sign-in/email
+```
+
+**Request Body:**
+
+```json
+{
+  "email": "user@example.com",
+  "password": "securepassword123"
+}
+```
+
+**Response:**
+
+```json
+{
+  "user": {
+    "id": "user_123",
+    "email": "user@example.com",
+    "name": "John Doe"
+  },
+  "session": {
+    "id": "session_456",
+    "expiresAt": "2024-01-08T00:00:00.000Z"
+  }
+}
+```
+
+### Sign Out
+
+End the current session.
+
+```
+POST /api/auth/sign-out
+```
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+### Get Session
+
+Get the current user session.
+
+```
+GET /api/auth/session
+```
+
+**Response (Authenticated):**
+
+```json
+{
+  "user": {
+    "id": "user_123",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "plan": "pro"
+  },
+  "session": {
+    "id": "session_456",
+    "expiresAt": "2024-01-08T00:00:00.000Z"
+  }
+}
+```
+
+**Response (Not Authenticated):**
+
+```json
+{
+  "user": null,
+  "session": null
+}
+```
+
+## OAuth Endpoints
+
+### Initiate OAuth
+
+Redirect the user to OAuth provider.
+
+```
+GET /api/auth/sign-in/[provider]
+```
+
+**Providers:** `google`, `github`, `discord`, etc.
+
+**Query Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `callbackURL` | URL to redirect after auth |
+
+**Example:**
+
+```
+GET /api/auth/sign-in/google?callbackURL=/dashboard
+```
+
+### OAuth Callback
+
+Handles OAuth provider callback (internal).
+
+```
+GET /api/auth/callback/[provider]
+```
+
+## Password Reset
+
+### Request Reset
+
+Send password reset email.
+
+```
+POST /api/auth/forget-password
+```
+
+**Request Body:**
+
+```json
+{
+  "email": "user@example.com",
+  "redirectTo": "/reset-password"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+### Reset Password
+
+Set a new password with reset token.
+
+```
+POST /api/auth/reset-password
+```
+
+**Request Body:**
+
+```json
+{
+  "token": "reset_token_from_email",
+  "newPassword": "newsecurepassword123"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+## Email Verification
+
+### Request Verification
+
+Resend verification email.
+
+```
+POST /api/auth/send-verification-email
+```
+
+**Request Body:**
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+### Verify Email
+
+Verify email with token.
+
+```
+POST /api/auth/verify-email
+```
+
+**Request Body:**
+
+```json
+{
+  "token": "verification_token"
+}
+```
+
+## Client-Side Usage
+
+<Tabs items={['React', 'JavaScript']}>
+  <Tabs.Tab>
+    ```tsx
+    import { signIn, signUp, signOut, useSession } from "@/lib/auth/client"
+    
+    // Sign up
+    const result = await signUp.email({
+      email: "user@example.com",
+      password: "password123",
+      name: "John",
+    })
+    
+    // Sign in
+    await signIn.email({
+      email: "user@example.com",
+      password: "password123",
+    })
+    
+    // OAuth sign in
+    await signIn.social({
+      provider: "google",
+      callbackURL: "/dashboard",
+    })
+    
+    // Sign out
+    await signOut()
+    
+    // Get session (hook)
+    function Component() {
+      const { data: session, isPending } = useSession()
+      // ...
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```javascript
+    // Sign up
+    const response = await fetch("/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "user@example.com",
+        password: "password123",
+        name: "John",
+      }),
+    })
+    
+    // Sign in
+    const response = await fetch("/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "user@example.com",
+        password: "password123",
+      }),
+    })
+    
+    // Get session
+    const response = await fetch("/api/auth/session")
+    const { user, session } = await response.json()
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Error Codes
+
+| Code | Description |
+|------|-------------|
+| `USER_NOT_FOUND` | No user with this email |
+| `INVALID_PASSWORD` | Incorrect password |
+| `EMAIL_NOT_VERIFIED` | Email verification required |
+| `USER_ALREADY_EXISTS` | Email already registered |
+| `INVALID_TOKEN` | Reset/verification token invalid or expired |
+| `SESSION_EXPIRED` | Session has expired |

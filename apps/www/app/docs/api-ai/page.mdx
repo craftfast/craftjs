@@ -1,0 +1,298 @@
+# AI API
+
+import { Tabs, Callout } from 'nextra/components'
+
+The AI API provides endpoints for chat completions and text generation.
+
+## Chat Completions
+
+Create a chat completion with streaming response.
+
+```
+POST /api/chat
+```
+
+**Request Body:**
+
+```json
+{
+  "messages": [
+    { "role": "system", "content": "You are a helpful assistant." },
+    { "role": "user", "content": "Hello!" }
+  ],
+  "model": "gpt-4o",
+  "chatId": "optional-chat-id"
+}
+```
+
+**Parameters:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `messages` | array | Yes | Conversation history |
+| `model` | string | No | Model ID (default: `gpt-4o`) |
+| `chatId` | string | No | Existing chat ID to continue |
+
+**Response:**
+
+Returns a streaming response with Server-Sent Events (SSE).
+
+```
+data: {"type":"text-delta","textDelta":"Hello"}
+data: {"type":"text-delta","textDelta":"!"}
+data: {"type":"text-delta","textDelta":" How"}
+data: {"type":"finish","finishReason":"stop"}
+```
+
+**Headers:**
+
+```
+X-Chat-Id: chat_123
+X-RateLimit-Remaining: 9
+```
+
+## Available Models
+
+| Model ID | Provider | Description |
+|----------|----------|-------------|
+| `gpt-4o` | OpenAI | Latest GPT-4 Omni |
+| `gpt-4o-mini` | OpenAI | Smaller, faster GPT-4 |
+| `claude-sonnet-4` | Anthropic | Claude Sonnet 4 |
+| `claude-3-5-haiku` | Anthropic | Fast Claude model |
+| `gemini-2-flash` | Google | Gemini 2.0 Flash |
+
+## Client Usage
+
+<Tabs items={['useChat Hook', 'Fetch API', 'Server']}>
+  <Tabs.Tab>
+    ```tsx
+    "use client"
+    
+    import { useChat } from "ai/react"
+    
+    export function Chat() {
+      const {
+        messages,
+        input,
+        handleInputChange,
+        handleSubmit,
+        isLoading,
+        error,
+      } = useChat({
+        api: "/api/chat",
+        body: {
+          model: "gpt-4o",
+        },
+      })
+      
+      return (
+        <div>
+          {messages.map((m) => (
+            <div key={m.id}>
+              {m.role}: {m.content}
+            </div>
+          ))}
+          
+          <form onSubmit={handleSubmit}>
+            <input
+              value={input}
+              onChange={handleInputChange}
+              placeholder="Type a message..."
+            />
+            <button type="submit" disabled={isLoading}>
+              Send
+            </button>
+          </form>
+        </div>
+      )
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    async function chat(messages: any[]) {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages,
+          model: "gpt-4o",
+        }),
+      })
+      
+      // Handle streaming response
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      
+      while (true) {
+        const { done, value } = await reader!.read()
+        if (done) break
+        
+        const chunk = decoder.decode(value)
+        console.log(chunk)
+      }
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    // Server-side usage
+    import { generateText, streamText } from "ai"
+    import { models } from "@/lib/ai/models"
+    
+    // Non-streaming
+    const { text } = await generateText({
+      model: models["gpt-4o"],
+      prompt: "Hello!",
+    })
+    
+    // Streaming
+    const result = await streamText({
+      model: models["claude-sonnet-4"],
+      messages: [
+        { role: "user", content: "Hello!" }
+      ],
+    })
+    
+    for await (const chunk of result.textStream) {
+      process.stdout.write(chunk)
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Chat History
+
+### List Chats
+
+Get all chats for the current user.
+
+```
+GET /api/chats
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": "chat_123",
+    "title": "First chat",
+    "model": "gpt-4o",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+]
+```
+
+### Get Chat Messages
+
+Get messages for a specific chat.
+
+```
+GET /api/chats/[id]/messages
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": "msg_1",
+    "chatId": "chat_123",
+    "role": "user",
+    "content": "Hello!",
+    "createdAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "msg_2",
+    "chatId": "chat_123",
+    "role": "assistant",
+    "content": "Hello! How can I help you today?",
+    "createdAt": "2024-01-01T00:00:01.000Z"
+  }
+]
+```
+
+### Delete Chat
+
+Delete a chat and all its messages.
+
+```
+DELETE /api/chats/[id]
+```
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+## Tool Calling
+
+The AI can use tools when enabled. Tool calls are included in the stream:
+
+```
+data: {"type":"tool-call","toolCallId":"call_1","toolName":"weather","args":{"location":"San Francisco"}}
+data: {"type":"tool-result","toolCallId":"call_1","result":{"temperature":72,"conditions":"sunny"}}
+data: {"type":"text-delta","textDelta":"The weather in San Francisco is 72°F and sunny."}
+```
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `weather` | Get current weather |
+| `search` | Search the web |
+| `calculator` | Perform calculations |
+
+See [Custom AI Tools](/custom-ai-tools) for adding your own tools.
+
+## Error Handling
+
+```json
+{
+  "error": "Rate limit exceeded",
+  "code": "RATE_LIMITED",
+  "details": {
+    "remaining": 0,
+    "reset": 1699999999999
+  }
+}
+```
+
+| Code | Description |
+|------|-------------|
+| `RATE_LIMITED` | Too many requests |
+| `INVALID_MODEL` | Unknown model ID |
+| `CONTEXT_TOO_LONG` | Message history too large |
+| `PROVIDER_ERROR` | AI provider returned an error |
+
+## Usage Tracking
+
+AI usage is tracked automatically:
+
+```json
+{
+  "userId": "user_123",
+  "model": "gpt-4o",
+  "promptTokens": 100,
+  "completionTokens": 50,
+  "totalTokens": 150,
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+Access your usage via:
+
+```
+GET /api/usage
+```
+
+<Callout type="info">
+  Usage counts toward your plan limits. Check `/api/usage/remaining` for your current allowance.
+</Callout>

@@ -1,0 +1,45 @@
+export default {
+  index: {
+    title: "Introduction",
+    theme: {
+      layout: "full",
+    },
+  },
+  "getting-started": {
+    title: "Getting Started",
+    type: "separator",
+  },
+  installation: "Installation",
+  "project-structure": "Project Structure",
+  configuration: "Configuration",
+  features: {
+    title: "Features",
+    type: "separator",
+  },
+  authentication: "Authentication",
+  ai: "AI Integration",
+  database: "Database",
+  payments: "Payments",
+  email: "Email",
+  storage: "Storage",
+  caching: "Caching",
+  "background-jobs": "Background Jobs",
+  analytics: "Analytics",
+  guides: {
+    title: "Guides",
+    type: "separator",
+  },
+  "building-chatbot": "Building a Chatbot",
+  "custom-ai-tools": "Custom AI Tools",
+  "adding-oauth": "Adding OAuth Providers",
+  "webhook-handling": "Webhook Handling",
+  deployment: "Deployment",
+  api: {
+    title: "API Reference",
+    type: "separator",
+  },
+  "api-routes": "API Routes",
+  "api-auth": "Auth API",
+  "api-ai": "AI API",
+  "api-payments": "Payments API",
+};
