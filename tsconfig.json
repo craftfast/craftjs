@@ -3,6 +3,7 @@
   "extends": "./tooling/typescript/base.json",
   "compilerOptions": {},
   "files": [],
+  "exclude": ["**/node_modules", "packages/create-craft-app/template"],
   "references": [
     {
       "path": "apps/www"

@@ -14,7 +14,7 @@ interface CreateProjectOptions {
 
 export async function createProject({ projectName, packageManager }: CreateProjectOptions) {
   const projectDir = path.resolve(process.cwd(), projectName);
-  const templateDir = path.join(__dirname, "..", "..", "template");
+  const templateDir = path.join(__dirname, "..", "template");
 
   // Check if directory already exists
   if (fs.existsSync(projectDir)) {
