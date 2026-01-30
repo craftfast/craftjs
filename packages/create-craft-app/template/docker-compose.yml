@@ -1,0 +1,120 @@
+# CraftJS - Local Development Setup
+# Run: docker compose up
+# This starts everything you need to build apps with AI
+
+services:
+  # ============================================
+  # PostgreSQL Database
+  # Your data stays on your machine
+  # ============================================
+  db:
+    image: postgres:16-alpine
+    container_name: craftjs-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: craft
+      POSTGRES_PASSWORD: craft
+      POSTGRES_DB: craft
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U craft -d craft"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # CraftJS App
+  # Your AI-powered app builder
+  # ============================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: craftjs-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Database (required)
+      DATABASE_URL: postgresql://craft:craft@db:5432/craft
+
+      # Auth (required - change the secret in production!)
+      BETTER_AUTH_SECRET: change-me-to-a-32-character-secret-in-production
+      BETTER_AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+      # AI Providers (optional - add your keys to enable AI)
+      # OPENAI_API_KEY: sk-...
+      # ANTHROPIC_API_KEY: sk-ant-...
+
+      # Local AI with Ollama (optional - uncomment ollama service below)
+      # OLLAMA_BASE_URL: http://ollama:11434
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Mount the project directory for AI to create/edit files
+      - ./src:/app/src
+      - ./public:/app/public
+
+  # ============================================
+  # OPTIONAL SERVICES
+  # Uncomment what you need
+  # ============================================
+
+  # # Redis - For caching and rate limiting
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: craftjs-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   command: redis-server --appendonly yes
+
+  # # MinIO - S3-compatible storage (for file uploads)
+  # minio:
+  #   image: minio/minio
+  #   container_name: craftjs-minio
+  #   restart: unless-stopped
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   environment:
+  #     MINIO_ROOT_USER: minioadmin
+  #     MINIO_ROOT_PASSWORD: minioadmin
+  #   volumes:
+  #     - minio_data:/data
+  #   command: server /data --console-address ":9001"
+
+  # # Mailhog - Email testing (catches all outgoing emails)
+  # mailhog:
+  #   image: mailhog/mailhog
+  #   container_name: craftjs-mailhog
+  #   restart: unless-stopped
+  #   ports:
+  #     - "1025:1025"  # SMTP
+  #     - "8025:8025"  # Web UI
+
+  # # Ollama - Local AI (no API keys needed!)
+  # # Note: Requires ~4GB RAM for small models, ~8GB+ for larger ones
+  # ollama:
+  #   image: ollama/ollama
+  #   container_name: craftjs-ollama
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   # Pull a coding model on first run:
+  #   # docker exec craftjs-ollama ollama pull codellama:7b
+
+volumes:
+  postgres_data:
+  # redis_data:
+  # minio_data:
+  # ollama_data:

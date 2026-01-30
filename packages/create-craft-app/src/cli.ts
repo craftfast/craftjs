@@ -106,12 +106,34 @@ export async function runCli() {
   outro(chalk.green("🎉 Your Craft.js app is ready!"));
 
   console.log();
-  console.log(chalk.bold("Next steps:"));
+  console.log(chalk.bgGreen.black(" Quick Start "));
   console.log();
-  console.log(`  ${chalk.cyan("cd")} ${projectName}`);
-  console.log(`  ${chalk.cyan("cp")} .env.example .env`);
-  console.log(`  ${chalk.cyan(packageManager === "npm" ? "npm run" : packageManager)} dev`);
+  console.log(`  ${chalk.cyan("1.")} cd ${projectName}`);
+  console.log(`  ${chalk.cyan("2.")} cp .env.example .env`);
+  console.log(`  ${chalk.cyan("3.")} docker compose up -d`);
+  console.log(
+    `  ${chalk.cyan("4.")} ${packageManager === "npm" ? "npm run" : packageManager} db:push`
+  );
+  console.log(`  ${chalk.cyan("5.")} ${packageManager === "npm" ? "npm run" : packageManager} dev`);
   console.log();
-  console.log(chalk.dim("For documentation, visit: https://craftjs.dev"));
+  console.log(chalk.dim("Your app will be running at http://localhost:3000"));
+  console.log();
+  console.log(chalk.bgBlue.black(" What's included "));
+  console.log();
+  console.log(`  ${chalk.green("✓")} PostgreSQL database (Docker)`);
+  console.log(`  ${chalk.green("✓")} Authentication (email/password)`);
+  console.log(`  ${chalk.green("✓")} AI chat interface (add your API key)`);
+  console.log(`  ${chalk.green("✓")} AI app builder (create pages via chat)`);
+  console.log();
+  console.log(chalk.dim("No external services required - everything runs locally!"));
+  console.log();
+  console.log(chalk.bgYellow.black(" Optional "));
+  console.log();
+  console.log(
+    `  Add AI: Set ${chalk.cyan("OPENAI_API_KEY")} or ${chalk.cyan("ANTHROPIC_API_KEY")} in .env`
+  );
+  console.log(`  Local AI: Uncomment ${chalk.cyan("ollama")} in docker-compose.yml`);
+  console.log();
+  console.log(chalk.dim("Documentation: https://craftjs.dev"));
   console.log();
 }
